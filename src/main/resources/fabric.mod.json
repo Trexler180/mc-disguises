@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "disguises",
+	"version": "${version}",
+	"name": "Disguises",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/disguises/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.coffee.disguises.Disguises"
+		],
+		"client": [
+			"com.coffee.disguises.DisguisesClient"
+		]
+	},
+	"mixins": [
+		"disguises.mixins.json",
+		{
+			"config": "disguises.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
