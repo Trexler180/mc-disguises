@@ -1,6 +1,9 @@
 package com.coffee.disguises.packet;
 
 import com.coffee.disguises.watcher.*;
+import com.coffee.disguises.watcher.BlockDisplayWatcher;
+import com.coffee.disguises.watcher.FallingBlockWatcher;
+import com.coffee.disguises.watcher.MinecartWatcher;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -98,6 +101,23 @@ public class MetadataBuilder {
     // Player skin parts
     private static Field F_PLAYER_SKIN_PARTS;
 
+    // AbstractMinecart custom display block
+    // DATA_ID_DISPLAY_BLOCK  (int)  — raw block-state ID  ← INT, not BlockState
+    // DATA_ID_DISPLAY_OFFSET (int)  — Y pixel offset (default 6)
+    // DATA_ID_CUSTOM_DISPLAY (bool) — whether to use the custom tile
+    private static Field F_MINECART_DISPLAY_BLOCK;
+    private static Field F_MINECART_DISPLAY_OFFSET;
+    private static Field F_MINECART_CUSTOM_DISPLAY;
+
+    // BlockDisplay block state
+    // Vanilla BlockDisplay.DATA_BLOCK_STATE_ID uses EntityDataSerializers.BLOCK_STATE —
+    // the accessor type is EntityDataAccessor<BlockState>, NOT <Integer>.
+    private static Field F_BLOCK_DISPLAY_BLOCK_STATE;
+
+    // Display base — scale field (Vector3f, index 12 in 1.21.x)
+    // Sending (1,1,1) is required; the default is (0,0,0) which makes the entity invisible.
+    private static Field F_DISPLAY_SCALE;
+
     // ── Expected DataTracker indices ──────────────────────────────────────────
     // Used as fallback when name-based lookup fails.
 
@@ -130,9 +150,21 @@ public class MetadataBuilder {
 
     private static final int IDX_PLAYER_SKIN_PARTS           = 17; // DATA_PLAYER_MODE_CUSTOMISATION
 
+    // AbstractMinecart (indices relative to full entity hierarchy — approximately 11–13 in 1.21.x)
+    private static final int IDX_MINECART_DISPLAY_BLOCK   = 11;
+    private static final int IDX_MINECART_DISPLAY_OFFSET  = 12;
+    private static final int IDX_MINECART_CUSTOM_DISPLAY  = 13;
+
+    // BlockDisplay block state (first Display subtype-specific field, ~index 23 in 1.21.x)
+    private static final int IDX_BLOCK_DISPLAY_BLOCK_STATE = 23;
+
+    // Display.DATA_SCALE_ID — index 12 in 1.21.x Mojang mappings
+    private static final int IDX_DISPLAY_SCALE = 12;
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private static volatile boolean initialized = false;
+    private static volatile boolean minecartInitialized = false;
 
     public static synchronized void init() {
         if (initialized) return;
@@ -186,6 +218,66 @@ public class MetadataBuilder {
                     "DATA_PLAYER_MODE_CUSTOMISATION", "DATA_SKIN_PARTS", "DATA_PLAYER_SKIN_CUSTOMISATION");
         }
 
+        // AbstractMinecart — custom display block fields.
+        // In MC 1.21.2+ the minecart was reworked; the display-block DataTracker fields
+        // moved and the class hierarchy changed.  Try all known names across versions.
+        Class<?> minecartClass = loadClass(
+                "net.minecraft.world.entity.vehicle.AbstractMinecart",       // 1.21.1 and below / Mojang
+                "net.minecraft.world.entity.vehicle.AbstractMinecartLike",   // 1.21.2+ Mojang (post-rework base)
+                "net.minecraft.world.entity.vehicle.MinecartLike",           // alternate name
+                "net.minecraft.world.entity.vehicle.Minecart"                // plain Minecart (some mappings)
+        );
+        if (minecartClass != null) {
+            F_MINECART_DISPLAY_BLOCK  = resolve(minecartClass, IDX_MINECART_DISPLAY_BLOCK,
+                    "DATA_ID_DISPLAY_BLOCK", "DISPLAY_BLOCK_STATE_ID", "DATA_DISPLAY_BLOCK_STATE_ID");
+            F_MINECART_DISPLAY_OFFSET = resolve(minecartClass, IDX_MINECART_DISPLAY_OFFSET,
+                    "DATA_ID_DISPLAY_OFFSET", "DISPLAY_OFFSET_ID", "DATA_DISPLAY_OFFSET_ID");
+            F_MINECART_CUSTOM_DISPLAY = resolve(minecartClass, IDX_MINECART_CUSTOM_DISPLAY,
+                    "DATA_ID_CUSTOM_DISPLAY", "CUSTOM_DISPLAY_ID", "DATA_CUSTOM_DISPLAY_ID");
+        } else {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] AbstractMinecart class not found — minecart block display will not work.");
+        }
+
+        // BlockDisplay — block state field
+        Class<?> blockDisplayClass = loadClass(
+                "net.minecraft.world.entity.Display$BlockDisplay",
+                "net.minecraft.world.entity.display.BlockDisplay"
+        );
+        if (blockDisplayClass != null) {
+            // CRITICAL: Force the Display base class to fully initialize so its static
+            // initializer runs and registers VECTOR3 / QUATERNION into the
+            // EntityDataSerializers IdMapper.  Without this, sending a DataValue with a
+            // Vector3f value crashes the encoder with:
+            //   "Can't find id for '10' in map IdMapper"
+            // because the serializer is never added to the map until Display.<clinit> runs.
+            Class<?> displayBaseClass = blockDisplayClass.getSuperclass();
+            if (displayBaseClass != null) {
+                try {
+                    Class.forName(displayBaseClass.getName(), true, displayBaseClass.getClassLoader());
+                    com.coffee.disguises.DisguisesMod.LOGGER.debug(
+                            "[MetadataBuilder] Force-initialized Display base '{}' to register VECTOR3/QUATERNION serializers.",
+                            displayBaseClass.getName());
+                } catch (Exception e) {
+                    com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                            "[MetadataBuilder] Could not force-initialize Display base class: {}", e.getMessage());
+                }
+            }
+
+            F_BLOCK_DISPLAY_BLOCK_STATE = resolve(blockDisplayClass, IDX_BLOCK_DISPLAY_BLOCK_STATE,
+                    "DATA_BLOCK_STATE_ID", "BLOCK_STATE_ID", "DATA_BLOCK_STATE");
+            // Resolve scale from Display base; fall back to scanning BlockDisplay itself.
+            if (displayBaseClass != null) {
+                F_DISPLAY_SCALE = resolve(displayBaseClass, IDX_DISPLAY_SCALE,
+                        "DATA_SCALE_ID", "DATA_SCALE", "SCALE_ID");
+            }
+            if (F_DISPLAY_SCALE == null) {
+                F_DISPLAY_SCALE = resolve(blockDisplayClass, IDX_DISPLAY_SCALE,
+                        "DATA_SCALE_ID", "DATA_SCALE", "SCALE_ID");
+            }
+        } else {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] BlockDisplay class not found — block_display disguise will not show block.");
+        }
+
         // Summary
         logResolution("Entity flags",          F_ENTITY_FLAGS);
         logResolution("Entity customName",     F_ENTITY_CUSTOM_NAME);
@@ -199,8 +291,106 @@ public class MetadataBuilder {
         logResolution("Wolf collarColor",      F_WOLF_COLLAR_COLOR);
         logResolution("Enderman creepy",       F_ENDERMAN_CREEPY);
         logResolution("Player skinParts",      F_PLAYER_SKIN_PARTS);
+        logResolution("Minecart displayBlock",  F_MINECART_DISPLAY_BLOCK);
+        logResolution("Minecart displayOffset", F_MINECART_DISPLAY_OFFSET);
+        logResolution("Minecart customDisplay", F_MINECART_CUSTOM_DISPLAY);
+        logResolution("BlockDisplay blockState",F_BLOCK_DISPLAY_BLOCK_STATE);
+        logResolution("Display scale",          F_DISPLAY_SCALE);
+
+        // Resolve minecart fields now, using EntityType.MINECART to get the right class.
+        initMinecartFields();
 
         initialized = true;
+    }
+
+    /**
+     * Resolves minecart display-block DataTracker fields.
+     * Gets the entity class directly from EntityType.MINECART (no live entity needed),
+     * then uses NAME-ONLY resolution — never index scan.
+     *
+     * Index scan is intentionally disabled here because indices 11–13 exist on
+     * LivingEntity (effect-ambience, arrow-count, stinger-count) and would be
+     * matched on any entity class, producing completely wrong accessor types.
+     */
+    private static synchronized void initMinecartFields() {
+        if (minecartInitialized) return;
+
+        // Get the entity class from EntityType.MINECART via reflection.
+        // EntityType stores its entity factory; we create a temporary instance
+        // using a null level just to get the concrete class — we only need the class
+        // object itself, not a functioning entity.
+        Class<?> minecartEntityClass = null;
+        try {
+            // create(Level, EntitySpawnReason) — pass null level and COMMAND reason.
+            // We only need the class object; the entity is discarded immediately.
+            // Wrapped in try/catch in case null-level causes an NPE inside the factory.
+            net.minecraft.world.entity.Entity tmp =
+                    net.minecraft.world.entity.EntityType.MINECART.create(
+                            (net.minecraft.world.level.Level) null,
+                            net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+            if (tmp != null) {
+                minecartEntityClass = tmp.getClass();
+                com.coffee.disguises.DisguisesMod.LOGGER.debug(
+                        "[MetadataBuilder] Got minecart class '{}' from EntityType.MINECART.create()",
+                        minecartEntityClass.getName());
+            }
+        } catch (Exception e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.debug(
+                    "[MetadataBuilder] EntityType.MINECART.create(null, COMMAND) threw {}: {} — trying class name fallback",
+                    e.getClass().getSimpleName(), e.getMessage());
+        }
+
+        // If create() failed, fall back to known Mojang class names.
+        if (minecartEntityClass == null) {
+            minecartEntityClass = loadClass(
+                    "net.minecraft.world.entity.vehicle.Minecart",
+                    "net.minecraft.world.entity.vehicle.AbstractMinecart",
+                    "net.minecraft.world.entity.vehicle.AbstractMinecartLike"
+            );
+        }
+
+        if (minecartEntityClass == null) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Could not determine minecart entity class — " +
+                            "custom display blocks in minecarts will not work.");
+            minecartInitialized = true;
+            return;
+        }
+
+        com.coffee.disguises.DisguisesMod.LOGGER.info(
+                "[MetadataBuilder] Resolving minecart display fields from class '{}'",
+                minecartEntityClass.getName());
+
+        // Name-only resolution — never fall back to index scan.
+        // The indices 11–13 collide with LivingEntity fields; scanning would return
+        // the wrong accessor (e.g. DATA_EFFECT_AMBIENCE_ID, DATA_ARROW_COUNT_ID).
+        Class<?> c = minecartEntityClass;
+        while (c != null && c != Object.class) {
+            if (F_MINECART_DISPLAY_BLOCK == null)
+                F_MINECART_DISPLAY_BLOCK = resolveByNameOnly(c,
+                        "DATA_ID_DISPLAY_BLOCK", "DISPLAY_BLOCK_STATE_ID", "DATA_DISPLAY_BLOCK_STATE_ID");
+            if (F_MINECART_DISPLAY_OFFSET == null)
+                F_MINECART_DISPLAY_OFFSET = resolveByNameOnly(c,
+                        "DATA_ID_DISPLAY_OFFSET", "DISPLAY_OFFSET_ID", "DATA_DISPLAY_OFFSET_ID");
+            if (F_MINECART_CUSTOM_DISPLAY == null)
+                F_MINECART_CUSTOM_DISPLAY = resolveByNameOnly(c,
+                        "DATA_ID_CUSTOM_DISPLAY", "CUSTOM_DISPLAY_ID", "DATA_CUSTOM_DISPLAY_ID");
+            if (F_MINECART_DISPLAY_BLOCK != null
+                    && F_MINECART_DISPLAY_OFFSET != null
+                    && F_MINECART_CUSTOM_DISPLAY != null) break;
+            c = c.getSuperclass();
+        }
+
+        logResolution("Minecart displayBlock",  F_MINECART_DISPLAY_BLOCK);
+        logResolution("Minecart displayOffset", F_MINECART_DISPLAY_OFFSET);
+        logResolution("Minecart customDisplay", F_MINECART_CUSTOM_DISPLAY);
+
+        if (F_MINECART_DISPLAY_BLOCK == null) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Minecart display block fields not found — " +
+                            "the custom display tile feature may have been removed in this MC version.");
+        }
+        minecartInitialized = true;
     }
 
     // =========================================================================
@@ -214,6 +404,17 @@ public class MetadataBuilder {
     public static List<SynchedEntityData.DataValue<?>> build(
             FlagWatcher watcher,
             com.coffee.disguises.disguise.DisguiseType type) {
+        return build(watcher, type, null);
+    }
+
+    /**
+     * Entity parameter retained for API compatibility; the entity is no longer
+     * used internally (minecart fields are resolved in init() via EntityType).
+     */
+    public static List<SynchedEntityData.DataValue<?>> build(
+            FlagWatcher watcher,
+            com.coffee.disguises.disguise.DisguiseType type,
+            net.minecraft.world.entity.Entity entity) {
 
         if (!initialized) init();
 
@@ -290,6 +491,28 @@ public class MetadataBuilder {
             putByte(list, F_PLAYER_SKIN_PARTS, (byte) 0x7F);
         }
 
+        // ── Minecart custom display block ─────────────────────────────────────
+        // Only emitted when the watcher has explicitly requested a custom block.
+
+        if (watcher instanceof MinecartWatcher mw && mw.isUseCustomDisplay()) {
+            putInt(list,  F_MINECART_DISPLAY_BLOCK,   mw.getBlockId());
+            putInt(list,  F_MINECART_DISPLAY_OFFSET,  mw.getDisplayOffset());
+            putBool(list, F_MINECART_CUSTOM_DISPLAY,  true);
+        }
+
+        // ── BlockDisplay block state ───────────────────────────────────────────
+        // DATA_BLOCK_STATE_ID uses EntityDataSerializers.BLOCK_STATE — the accessor
+        // type is EntityDataAccessor<BlockState>, NOT <Integer>.  Passing getBlockId()
+        // (an int) would cause a type-mismatch crash in the Netty encoder.
+
+        if (watcher instanceof BlockDisplayWatcher bdw) {
+            // Scale (1,1,1) is mandatory — the vanilla default is (0,0,0) which
+            // makes the entity invisible.  Must be sent before or alongside the
+            // block state so the client renders a full-size block.
+            putVector3f(list, F_DISPLAY_SCALE, 1f, 1f, 1f);
+            putBlockState(list, F_BLOCK_DISPLAY_BLOCK_STATE, bdw.getBlockState());
+        }
+
         return list;
     }
 
@@ -347,6 +570,32 @@ public class MetadataBuilder {
             dumpAccessors(clazz);
         }
 
+        return null;
+    }
+
+    /**
+     * Name-only resolution — never falls back to index scan.
+     * Used for fields where the index is shared with unrelated fields on parent classes
+     * (e.g. minecart display-block indices 11–13 collide with LivingEntity fields), so
+     * a scan hit on the wrong class would return a completely wrong accessor.
+     */
+    private static Field resolveByNameOnly(Class<?> clazz, String... names) {
+        if (clazz == null) return null;
+        for (String name : names) {
+            try {
+                Field f = findFieldInHierarchy(clazz, name);
+                if (f != null) {
+                    f.setAccessible(true);
+                    Object val = f.get(null);
+                    if (val instanceof EntityDataAccessor<?> acc) {
+                        com.coffee.disguises.DisguisesMod.LOGGER.debug(
+                                "[MetadataBuilder] {} resolved by name '{}' → index {}",
+                                clazz.getSimpleName(), name, acc.id());
+                        return f;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
         return null;
     }
 
@@ -477,5 +726,23 @@ public class MetadataBuilder {
     private static void putOptComponent(List<SynchedEntityData.DataValue<?>> list,
                                         Field f, Optional<net.minecraft.network.chat.Component> value) {
         put(list, f, value);
+    }
+    private static void putBlockState(List<SynchedEntityData.DataValue<?>> list, Field f,
+                                      net.minecraft.world.level.block.state.BlockState value) {
+        put(list, f, value);
+    }
+    private static void putVector3f(List<SynchedEntityData.DataValue<?>> list, Field f,
+                                    float x, float y, float z) {
+        if (f == null) return;
+        try {
+            @SuppressWarnings("unchecked")
+            EntityDataAccessor<org.joml.Vector3f> acc =
+                    (EntityDataAccessor<org.joml.Vector3f>) f.get(null);
+            list.add(SynchedEntityData.DataValue.create(acc, new org.joml.Vector3f(x, y, z)));
+        } catch (Exception e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Failed to create Vector3f DataValue for field '{}': {}",
+                    f.getName(), e.getMessage());
+        }
     }
 }
