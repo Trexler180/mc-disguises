@@ -7,203 +7,450 @@ import net.minecraft.world.item.DyeColor;
 import java.util.*;
 
 /**
- * Parses a space-separated flag chain into mutations on a FlagWatcher.
+ * Parses a space-separated flag string into mutations on a FlagWatcher.
  *
- * Format: <flagName> [value] <flagName> [value] ...
+ * ─── FORMAT ───────────────────────────────────────────────────────────────────
  *
- * Example: "setColor RED setBaby setSize 3"
+ * Each flag is a keyword, optionally followed by a value token:
  *
- * Returns a list of errors for any unrecognised flags (logged as warnings,
- * not fatal — unknown flags are skipped).
+ *   /disguise sheep setColor RED
+ *   /disguise sheep setBaby setColor RED setSheared
+ *   /disguise creeper setPowered setIgnited true
+ *   /disguise slime setSize 3
+ *   /disguise wolf setTamed setAngry setCollarColor BLUE
  *
- * This is intentionally lenient: bad values produce a warning rather than
- * failing the entire command.
+ * Boolean flags accept an OPTIONAL value token (true/false/yes/no/on/off/1/0).
+ * If the next token is NOT one of those keywords, the flag defaults to TRUE and
+ * the token is NOT consumed — it will be parsed as the next flag name.
+ *
+ * ─── THE OLD i++ BUG (FIXED) ─────────────────────────────────────────────────
+ *
+ * The previous implementation used:
+ *
+ *   case "setbaby" -> watcher.setOnFire(parseBool(tokens, i++, true));
+ *
+ * Java evaluates i++ BEFORE calling parseBool, so i was incremented regardless
+ * of whether the next token was actually a boolean. This meant:
+ *
+ *   setBaby setColor RED
+ *   ├── setBaby → parseBool(tokens, 1, true)
+ *   │   tokens[1] = "setColor" → not bool → returns true ✓ BUT i=2 (skipped "setColor")
+ *   └── "RED" → Unknown flag error
+ *
+ * The fix: use int[] as a mutable index. nextBool() only increments the index
+ * when the next token IS a recognised boolean keyword; otherwise it returns the
+ * default and leaves the index unchanged so the next iteration parses the token
+ * as a flag name.
  */
 public class FlagArgumentParser {
+
+    // =========================================================================
+    // Public API
+    // =========================================================================
 
     /**
      * Apply flag tokens to the given watcher.
      *
-     * @param watcher     the watcher to mutate (must already be the correct subtype)
-     * @param type        the DisguiseType (used to validate which flags are applicable)
-     * @param flagString  the raw flag string from the command argument
-     * @return list of parse warnings (non-fatal)
+     * @param watcher    the watcher to mutate
+     * @param type       the DisguiseType (used for applicability checks)
+     * @param flagString the raw flag string from the command argument
+     * @return list of parse warnings (non-fatal; shown to the user as yellow messages)
      */
     public static List<String> apply(FlagWatcher watcher, DisguiseType type, String flagString) {
         List<String> warnings = new ArrayList<>();
         if (flagString == null || flagString.isBlank()) return warnings;
 
         String[] tokens = flagString.trim().split("\\s+");
-        int i = 0;
-        while (i < tokens.length) {
-            String flag = tokens[i].toLowerCase();
-            i++;
+        int[] i = {0};  // mutable index — helpers advance it only when they consume a token
+
+        while (i[0] < tokens.length) {
+            String flag = tokens[i[0]++].toLowerCase();
 
             switch (flag) {
-                // ---- Universal flags ----
-                case "setfire", "fire" ->
-                        watcher.setOnFire(parseBool(tokens, i++, true));
+
+                // ── Universal Entity flags ───────────────────────────────────
+
+                case "setfire", "fire", "onfire" ->
+                        watcher.setOnFire(nextBool(tokens, i, true));
+
                 case "setinvisible", "invisible" ->
-                        watcher.setInvisible(parseBool(tokens, i++, true));
-                case "setglowing", "glowing" ->
-                        watcher.setGlowing(parseBool(tokens, i++, true));
+                        watcher.setInvisible(nextBool(tokens, i, true));
+
+                case "setglowing", "glowing", "glow" ->
+                        watcher.setGlowing(nextBool(tokens, i, true));
+
                 case "setsilent", "silent" ->
-                        watcher.setSilent(parseBool(tokens, i++, true));
-                case "setnogravity", "nogravity" ->
-                        watcher.setNoGravity(parseBool(tokens, i++, true));
-                case "setcustomname", "customname" -> {
-                    if (i < tokens.length) {
-                        watcher.setCustomName(tokens[i++]);
+                        watcher.setSilent(nextBool(tokens, i, true));
+
+                case "setnogravity", "nogravity", "fly" ->
+                        watcher.setNoGravity(nextBool(tokens, i, true));
+
+                case "setcrouching", "crouching", "sneak", "crouch" ->
+                        watcher.setCrouching(nextBool(tokens, i, true));
+
+                case "setsprinting", "sprinting", "sprint" ->
+                        watcher.setSprinting(nextBool(tokens, i, true));
+
+                case "setswimming", "swimming", "swim" ->
+                        watcher.setSwimming(nextBool(tokens, i, true));
+
+                case "setcustomname", "customname", "name" -> {
+                    String name = nextString(tokens, i);
+                    if (name != null) {
+                        watcher.setCustomName(name.replace('_', ' '));
                         watcher.setCustomNameVisible(true);
+                    } else {
+                        warnings.add("'setCustomName' requires a name value.");
                     }
                 }
-                case "setcustomnamevisible", "shownametag" ->
-                        watcher.setCustomNameVisible(parseBool(tokens, i++, true));
 
-                // ---- AgeableMob ----
+                case "setcustomnamevisible", "shownametag", "nametag" ->
+                        watcher.setCustomNameVisible(nextBool(tokens, i, true));
+
+                // ── LivingEntity ─────────────────────────────────────────────
+
+                case "sethealth", "health", "hp" -> {
+                    if (watcher instanceof LivingEntityWatcher lew) {
+                        float hp = nextFloat(tokens, i, -1f);
+                        if (hp < 0) warnings.add("'setHealth' requires a numeric value (e.g. setHealth 20).");
+                        else lew.setHealth(hp);
+                    } else {
+                        warnings.add("'setHealth' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                // ── AgeableMob (Cow, Sheep, Pig, Horse, etc.) ────────────────
+
                 case "setbaby", "baby" -> {
                     if (watcher instanceof AgeableWatcher aw) {
-                        aw.setBaby(parseBool(tokens, i++, true));
-                    } else warnings.add("'baby' is not applicable to " + type.getId());
+                        aw.setBaby(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setBaby' is not applicable to " + type.getId() + ".");
+                    }
                 }
 
-                // ---- Sheep ----
-                case "setcolor", "color", "setcolour", "colour" -> {
+                case "setadult", "adult" -> {
+                    if (watcher instanceof AgeableWatcher aw) {
+                        aw.setBaby(false);
+                    } else {
+                        warnings.add("'setAdult' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                // ── Sheep ─────────────────────────────────────────────────────
+
+                case "setcolor", "color", "setcolour", "colour", "wool" -> {
                     if (watcher instanceof SheepWatcher sw) {
-                        if (i < tokens.length) {
-                            try {
-                                sw.setColor(DyeColor.valueOf(tokens[i++].toUpperCase()));
-                            } catch (IllegalArgumentException e) {
-                                warnings.add("Unknown dye color: " + tokens[i - 1]);
+                        String raw = nextString(tokens, i);
+                        if (raw == null) {
+                            warnings.add("'setColor' requires a color name. Valid: " + dyeColorList());
+                        } else {
+                            DyeColor color = parseDyeColor(raw);
+                            if (color == null) {
+                                warnings.add("Unknown color '" + raw + "'. Valid: " + dyeColorList());
+                            } else {
+                                sw.setColor(color);
                             }
                         }
-                    } else warnings.add("'color' is not applicable to " + type.getId());
+                    } else {
+                        warnings.add("'setColor' is not applicable to " + type.getId() + ".");
+                    }
                 }
-                case "setsheared", "sheared" -> {
+
+                case "setsheared", "sheared", "shear" -> {
                     if (watcher instanceof SheepWatcher sw) {
-                        sw.setSheared(parseBool(tokens, i++, true));
-                    } else warnings.add("'sheared' is not applicable to " + type.getId());
-                }
-
-                // ---- Creeper ----
-                case "setpowered", "powered", "charged" -> {
-                    if (watcher instanceof CreeperWatcher cw) {
-                        cw.setPowered(parseBool(tokens, i++, true));
-                    } else warnings.add("'powered' is not applicable to " + type.getId());
-                }
-                case "setignited", "ignited" -> {
-                    if (watcher instanceof CreeperWatcher cw) {
-                        cw.setIgnited(parseBool(tokens, i++, true));
-                    } else warnings.add("'ignited' is not applicable to " + type.getId());
-                }
-
-                // ---- Slime / Magma Cube ----
-                case "setsize", "size" -> {
-                    if (watcher instanceof SlimeWatcher slw && i < tokens.length) {
-                        try {
-                            slw.setSize(Integer.parseInt(tokens[i++]));
-                        } catch (NumberFormatException e) {
-                            warnings.add("Invalid size value: " + tokens[i - 1]);
-                        }
-                    } else if (!(watcher instanceof SlimeWatcher)) {
-                        warnings.add("'size' is not applicable to " + type.getId());
+                        sw.setSheared(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setSheared' is not applicable to " + type.getId() + ".");
                     }
                 }
 
-                // ---- Wolf ----
-                case "settamed", "tamed" -> {
-                    if (watcher instanceof WolfWatcher ww) {
-                        ww.setTamed(parseBool(tokens, i++, true));
-                    } else warnings.add("'tamed' is not applicable to " + type.getId());
-                }
-                case "setsitting", "sitting" -> {
-                    if (watcher instanceof WolfWatcher ww) {
-                        ww.setSitting(parseBool(tokens, i++, true));
-                    } else warnings.add("'sitting' is not applicable to " + type.getId());
-                }
-                case "setangry", "angry" -> {
-                    if (watcher instanceof WolfWatcher ww) {
-                        ww.setAngry(parseBool(tokens, i++, true));
-                    } else warnings.add("'angry' is not applicable to " + type.getId());
-                }
-                case "setcollarcolor", "collarcolor" -> {
-                    if (watcher instanceof WolfWatcher ww && i < tokens.length) {
-                        try {
-                            ww.setCollarColor(DyeColor.valueOf(tokens[i++].toUpperCase()));
-                        } catch (IllegalArgumentException e) {
-                            warnings.add("Unknown dye color: " + tokens[i - 1]);
-                        }
-                    } else if (!(watcher instanceof WolfWatcher)) {
-                        warnings.add("'collarColor' is not applicable to " + type.getId());
+                // ── Creeper ───────────────────────────────────────────────────
+
+                case "setpowered", "powered", "charged", "charge" -> {
+                    if (watcher instanceof CreeperWatcher cw) {
+                        cw.setPowered(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setPowered' is not applicable to " + type.getId() + ".");
                     }
                 }
 
-                // ---- Enderman ----
-                case "setscreaming", "screaming" -> {
+                case "setignited", "ignited", "ignite", "fuse" -> {
+                    if (watcher instanceof CreeperWatcher cw) {
+                        cw.setIgnited(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setIgnited' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                // ── Slime / Magma Cube ────────────────────────────────────────
+
+                case "setsize", "size", "sz" -> {
+                    if (watcher instanceof SlimeWatcher slw) {
+                        int sz = nextInt(tokens, i, -1);
+                        if (sz < 1) {
+                            warnings.add("'setSize' requires a positive integer (1=tiny, 2=small, 4=large).");
+                        } else {
+                            slw.setSize(sz);
+                        }
+                    } else {
+                        warnings.add("'setSize' is not applicable to " + type.getId() + ". (Only slime / magma_cube)");
+                    }
+                }
+
+                // ── Wolf ──────────────────────────────────────────────────────
+
+                case "settamed", "tamed", "tame" -> {
+                    if (watcher instanceof WolfWatcher ww) {
+                        ww.setTamed(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setTamed' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                case "setsitting", "sitting", "sit" -> {
+                    if (watcher instanceof WolfWatcher ww) {
+                        ww.setSitting(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setSitting' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                case "setangry", "angry", "anger" -> {
+                    if (watcher instanceof WolfWatcher ww) {
+                        ww.setAngry(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setAngry' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                case "setcollarcolor", "collarcolor", "collar" -> {
+                    if (watcher instanceof WolfWatcher ww) {
+                        String raw = nextString(tokens, i);
+                        if (raw == null) {
+                            warnings.add("'setCollarColor' requires a color name. Valid: " + dyeColorList());
+                        } else {
+                            DyeColor color = parseDyeColor(raw);
+                            if (color == null) {
+                                warnings.add("Unknown color '" + raw + "'. Valid: " + dyeColorList());
+                            } else {
+                                ww.setCollarColor(color);
+                            }
+                        }
+                    } else {
+                        warnings.add("'setCollarColor' is not applicable to " + type.getId() + ".");
+                    }
+                }
+
+                // ── Enderman ──────────────────────────────────────────────────
+
+                case "setscreaming", "screaming", "scream", "angry_eyes" -> {
                     if (watcher instanceof EndermanWatcher ew) {
-                        ew.setScreaming(parseBool(tokens, i++, true));
-                    } else warnings.add("'screaming' is not applicable to " + type.getId());
-                }
-
-                // ---- LivingEntity ----
-                case "sethealth", "health" -> {
-                    if (watcher instanceof LivingEntityWatcher lew && i < tokens.length) {
-                        try {
-                            lew.setHealth(Float.parseFloat(tokens[i++]));
-                        } catch (NumberFormatException e) {
-                            warnings.add("Invalid health value: " + tokens[i - 1]);
-                        }
+                        ew.setScreaming(nextBool(tokens, i, true));
+                    } else {
+                        warnings.add("'setScreaming' is not applicable to " + type.getId() + ".");
                     }
                 }
 
-                default -> {
-                    warnings.add("Unknown flag: '" + flag + "' (skipped)");
-                    // Do NOT consume the next token — it might be the next flag name
-                }
+                default ->
+                        warnings.add("Unknown flag: '§e" + flag + "§7'. "
+                                + "Valid flags for §e" + type.getId() + "§7: "
+                                + String.join(", ", getValidFlagNames(type)));
             }
         }
         return warnings;
     }
 
-    /** Parse an optional boolean from the next token. Returns defaultValue if token missing or not a boolean. */
-    private static boolean parseBool(String[] tokens, int index, boolean defaultValue) {
-        if (index >= tokens.length) return defaultValue;
-        return switch (tokens[index].toLowerCase()) {
-            case "true", "yes", "on", "1" -> true;
-            case "false", "no", "off", "0" -> false;
-            default -> defaultValue;
+    // =========================================================================
+    // Tab completion
+    // =========================================================================
+
+    /**
+     * Returns a list of strings to suggest for tab-completing the flag portion
+     * of a disguise command.
+     *
+     * Called from DisguiseTypeArgument.suggestFlags() which is wired to the
+     * flags argument via .suggests().
+     *
+     * @param soFar  the text typed so far in the flags argument
+     * @param type   the disguise type (determines which flags are applicable)
+     * @return list of suggestion strings (may include values like color names)
+     */
+    public static List<String> suggest(String soFar, DisguiseType type) {
+        if (type == null) return Collections.emptyList();
+
+        // Split what's been typed. If it ends with a space, we're starting a new token.
+        // If not, the last token is partially typed.
+        boolean endsWithSpace = soFar.endsWith(" ");
+        String[] parts = soFar.trim().isEmpty() ? new String[0] : soFar.trim().split("\\s+");
+
+        String partial;
+        String precedingFlag;
+
+        if (endsWithSpace || parts.length == 0) {
+            partial = "";
+            precedingFlag = parts.length > 0 ? parts[parts.length - 1].toLowerCase() : null;
+        } else {
+            partial = parts[parts.length - 1];
+            precedingFlag = parts.length >= 2 ? parts[parts.length - 2].toLowerCase() : null;
+        }
+
+        // If the preceding token is a flag that expects a value, suggest values
+        if (precedingFlag != null && flagExpectsValue(precedingFlag)) {
+            return suggestValuesFor(precedingFlag, type, partial);
+        }
+
+        // Otherwise suggest flag names
+        return filterByPrefix(getValidFlagNames(type), partial);
+    }
+
+    /** Returns valid flag names for the given type. */
+    public static List<String> getValidFlagNames(DisguiseType type) {
+        if (type == null) return Collections.emptyList();
+        Class<? extends FlagWatcher> wc = type.getWatcherClass();
+
+        List<String> flags = new ArrayList<>(List.of(
+                "setFire", "setInvisible", "setGlowing", "setSilent", "setNoGravity",
+                "setCrouching", "setSprinting", "setCustomName", "setCustomNameVisible"
+        ));
+
+        if (isAssignable(wc, LivingEntityWatcher.class)) {
+            flags.add("setHealth");
+        }
+        if (isAssignable(wc, AgeableWatcher.class)) {
+            flags.addAll(List.of("setBaby", "setAdult"));
+        }
+        if (wc == SheepWatcher.class || isAssignable(wc, SheepWatcher.class)) {
+            flags.addAll(List.of("setColor", "setSheared"));
+        }
+        if (wc == CreeperWatcher.class) {
+            flags.addAll(List.of("setPowered", "setIgnited"));
+        }
+        if (wc == SlimeWatcher.class) {
+            flags.add("setSize");
+        }
+        if (wc == WolfWatcher.class) {
+            flags.addAll(List.of("setTamed", "setSitting", "setAngry", "setCollarColor"));
+        }
+        if (wc == EndermanWatcher.class) {
+            flags.add("setScreaming");
+        }
+
+        return flags;
+    }
+
+    // =========================================================================
+    // Internals
+    // =========================================================================
+
+    /**
+     * Reads the next token as a boolean only if it IS a boolean keyword.
+     * If the next token is missing OR is not a boolean keyword, returns
+     * {@code defaultValue} WITHOUT advancing the index.
+     * This prevents consuming the next flag name as a value.
+     */
+    private static boolean nextBool(String[] tokens, int[] i, boolean defaultValue) {
+        if (i[0] >= tokens.length) return defaultValue;
+        return switch (tokens[i[0]].toLowerCase()) {
+            case "true", "yes", "on", "1"  -> { i[0]++; yield true; }
+            case "false", "no", "off", "0" -> { i[0]++; yield false; }
+            default -> defaultValue;  // DO NOT advance i — next token is another flag
         };
     }
 
-    /** Returns all valid flag names for tab completion (optionally filtered by DisguiseType). */
-    public static List<String> getValidFlags(DisguiseType type) {
-        List<String> flags = new ArrayList<>(List.of(
-                "setFire", "setInvisible", "setGlowing", "setSilent", "setNoGravity",
-                "setCustomName", "setCustomNameVisible"
-        ));
-        Class<?> watcherClass = type.getWatcherClass();
-        if (isAssignable(watcherClass, AgeableWatcher.class)) {
-            flags.add("setBaby");
+    /** Reads the next token as a string and advances the index, or returns null. */
+    private static String nextString(String[] tokens, int[] i) {
+        return (i[0] < tokens.length) ? tokens[i[0]++] : null;
+    }
+
+    /** Reads the next token as an int, advances if successful, returns default if not. */
+    private static int nextInt(String[] tokens, int[] i, int defaultValue) {
+        if (i[0] >= tokens.length) return defaultValue;
+        try {
+            int v = Integer.parseInt(tokens[i[0]]);
+            i[0]++;
+            return v;
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
-        if (watcherClass == com.coffee.disguises.watcher.SheepWatcher.class) {
-            flags.addAll(List.of("setColor", "setSheared"));
+    }
+
+    /** Reads the next token as a float, advances if successful, returns default if not. */
+    private static float nextFloat(String[] tokens, int[] i, float defaultValue) {
+        if (i[0] >= tokens.length) return defaultValue;
+        try {
+            float v = Float.parseFloat(tokens[i[0]]);
+            i[0]++;
+            return v;
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
-        if (watcherClass == com.coffee.disguises.watcher.CreeperWatcher.class) {
-            flags.addAll(List.of("setPowered", "setIgnited"));
+    }
+
+    /** Parses a DyeColor by name (case-insensitive). Accepts both "RED" and "red". */
+    private static DyeColor parseDyeColor(String raw) {
+        try {
+            return DyeColor.valueOf(raw.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            // Try matching by getName() which can differ from enum name
+            for (DyeColor c : DyeColor.values()) {
+                if (c.getName().equalsIgnoreCase(raw) || c.name().equalsIgnoreCase(raw)) return c;
+            }
+            return null;
         }
-        if (watcherClass == com.coffee.disguises.watcher.SlimeWatcher.class) {
-            flags.add("setSize");
+    }
+
+    private static String dyeColorList() {
+        StringBuilder sb = new StringBuilder();
+        DyeColor[] colors = DyeColor.values();
+        for (int idx = 0; idx < colors.length; idx++) {
+            if (idx > 0) sb.append(", ");
+            sb.append(colors[idx].name());
         }
-        if (watcherClass == com.coffee.disguises.watcher.WolfWatcher.class) {
-            flags.addAll(List.of("setTamed", "setSitting", "setAngry", "setCollarColor"));
-        }
-        if (watcherClass == com.coffee.disguises.watcher.EndermanWatcher.class) {
-            flags.add("setScreaming");
-        }
-        return flags;
+        return sb.toString();
     }
 
     private static boolean isAssignable(Class<?> child, Class<?> parent) {
         return parent.isAssignableFrom(child);
+    }
+
+    /** Returns true if the given flag keyword expects a value on the next token. */
+    private static boolean flagExpectsValue(String flag) {
+        return switch (flag.toLowerCase()) {
+            case "setcolor", "color", "setcolour", "colour", "wool",
+                 "setcollarcolor", "collarcolor", "collar",
+                 "setcustomname", "customname", "name",
+                 "sethealth", "health", "hp",
+                 "setsize", "size", "sz" -> true;
+            default -> false;
+        };
+    }
+
+    /** Returns completion suggestions for the value of a specific flag. */
+    private static List<String> suggestValuesFor(String flag, DisguiseType type, String partial) {
+        List<String> values = switch (flag.toLowerCase()) {
+            case "setcolor", "color", "setcolour", "colour", "wool",
+                 "setcollarcolor", "collarcolor", "collar" -> {
+                List<String> colors = new ArrayList<>();
+                for (DyeColor c : DyeColor.values()) colors.add(c.name());
+                yield colors;
+            }
+            case "sethealth", "health", "hp" ->
+                    List.of("1", "5", "10", "20", "40", "100");
+            case "setsize", "size", "sz" ->
+                    List.of("1", "2", "3", "4");
+            default -> Collections.emptyList();
+        };
+        return filterByPrefix(values, partial);
+    }
+
+    private static List<String> filterByPrefix(List<String> candidates, String partial) {
+        if (partial.isEmpty()) return candidates;
+        String lp = partial.toLowerCase();
+        List<String> result = new ArrayList<>();
+        for (String c : candidates) {
+            if (c.toLowerCase().startsWith(lp)) result.add(c);
+        }
+        return result;
     }
 }

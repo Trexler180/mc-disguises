@@ -94,6 +94,12 @@ public abstract class EntityDataUpdateMixin {
     )
     private void disguises$filterEntityDataUpdates(Packet<?> packet, CallbackInfo ci) {
 
+        // If PacketInterceptor.sendMetadataPacket is currently executing, this packet
+        // came from MetadataBuilder and carries correct types for the disguise entity.
+        // Do NOT filter it — type-specific indices (≥15) such as sheep color (17),
+        // baby (16), creeper powered (17), etc. must reach the client intact.
+        if (Boolean.TRUE.equals(com.coffee.disguises.packet.PacketInterceptor.SENDING_DISGUISE_METADATA.get())) return;
+
         if (!((Object) this instanceof ServerGamePacketListenerImpl gameListener)) return;
         ServerPlayer observer = gameListener.player;
         if (!(observer.level() instanceof net.minecraft.server.level.ServerLevel serverLevel)) return;

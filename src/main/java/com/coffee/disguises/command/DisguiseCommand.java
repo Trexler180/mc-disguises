@@ -74,6 +74,7 @@ public class DisguiseCommand {
                                             return disguiseSelfAsPlayer(ctx.getSource(), name, "");
                                         })
                                         .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                .suggests(DisguiseTypeArgument::suggestFlags)
                                                 .executes(ctx -> {
                                                     String name = StringArgumentType.getString(ctx, "playerName");
                                                     String flags = StringArgumentType.getString(ctx, "flags");
@@ -95,6 +96,7 @@ public class DisguiseCommand {
                                             return disguiseSelfAsPlayer(ctx.getSource(), name, "");
                                         })
                                         .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                .suggests(DisguiseTypeArgument::suggestFlags)
                                                 .executes(ctx -> {
                                                     String name = StringArgumentType.getString(ctx, "skinName");
                                                     String flags = StringArgumentType.getString(ctx, "flags");
@@ -121,6 +123,7 @@ public class DisguiseCommand {
                                                             return disguiseEntityAsPlayer(ctx.getSource(), target, skin, "");
                                                         })
                                                         .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                                .suggests(DisguiseTypeArgument::suggestFlags)
                                                                 .executes(ctx -> {
                                                                     Entity target = EntityArgument.getEntity(ctx, "target");
                                                                     String skin = StringArgumentType.getString(ctx, "skinName");
@@ -139,6 +142,7 @@ public class DisguiseCommand {
                                                     return disguiseEntity(ctx.getSource(), target, type, "");
                                                 })
                                                 .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                        .suggests(DisguiseTypeArgument::suggestFlags)
                                                         .executes(ctx -> {
                                                             Entity target = EntityArgument.getEntity(ctx, "target");
                                                             DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
@@ -164,6 +168,7 @@ public class DisguiseCommand {
                                                     return disguiseRadius(ctx.getSource(), radius, type, "");
                                                 })
                                                 .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                        .suggests(DisguiseTypeArgument::suggestFlags)
                                                         .executes(ctx -> {
                                                             double radius = DoubleArgumentType.getDouble(ctx, "radius");
                                                             DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
@@ -181,6 +186,7 @@ public class DisguiseCommand {
                                 .requires(Permissions.require("disguises.disguise.self",
                                         DisguisesMod.CONFIG.permLevelSelf))
                                 .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                        .suggests(DisguiseTypeArgument::suggestFlags)
                                         .executes(ctx -> {
                                             String flags = StringArgumentType.getString(ctx, "flags");
                                             return modifySelf(ctx.getSource(), flags);
@@ -215,6 +221,7 @@ public class DisguiseCommand {
                                     return disguiseSelf(ctx.getSource(), type, "");
                                 })
                                 .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                        .suggests(DisguiseTypeArgument::suggestFlags)
                                         .executes(ctx -> {
                                             DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
                                             String flags = StringArgumentType.getString(ctx, "flags");
