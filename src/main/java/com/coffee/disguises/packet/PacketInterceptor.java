@@ -53,6 +53,21 @@ public class PacketInterceptor {
 
     // ── Deferred queues ───────────────────────────────────────────────────────
 
+    /**
+     * Set to true while PacketInterceptor is sending a disguise metadata packet.
+     * EntityDataUpdateMixin checks this flag: when true, the packet originated from
+     * MetadataBuilder (correct types for the disguise) and must NOT be filtered.
+     *
+     * Without this, EntityDataUpdateMixin strips type-specific indices (≥15) from
+     * our own packets — sheep color (index 17), baby (index 16), etc. would never
+     * reach the client even though they are correct for the disguise entity type.
+     *
+     * ThreadLocal because the server thread sets/clears it synchronously around
+     * send(), and the mixin's @Inject(HEAD) runs synchronously inside that same call.
+     */
+    public static final ThreadLocal<Boolean> SENDING_DISGUISE_METADATA =
+            ThreadLocal.withInitial(() -> false);
+
     private record PendingEquipment(long tick, ServerPlayer observer, Entity entity) {}
     private record PendingTabRemove(long tick, ServerPlayer observer, UUID fakeUUID) {}
     private record PendingEntityDataResend(long tick, ServerPlayer observer, Entity entity) {}
@@ -425,7 +440,14 @@ public class PacketInterceptor {
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values =
                     MetadataBuilder.build(disguise.getWatcher(), disguise.getType());
             if (!values.isEmpty()) {
-                observer.connection.send(new ClientboundSetEntityDataPacket(entity.getId(), values));
+                // Set bypass flag so EntityDataUpdateMixin knows this packet came from
+                // MetadataBuilder (correct types for the disguise) and must not be filtered.
+                SENDING_DISGUISE_METADATA.set(true);
+                try {
+                    observer.connection.send(new ClientboundSetEntityDataPacket(entity.getId(), values));
+                } finally {
+                    SENDING_DISGUISE_METADATA.set(false);
+                }
             }
         } catch (Exception e) {
             DisguisesMod.LOGGER.warn("Failed to send disguise metadata for {}: {}",
