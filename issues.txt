@@ -1,0 +1,407 @@
+cant disguise as ender dragon
+
+drawing a bow does not show a drawing bow on the disguised entity (specifically the skeleton)
+
+
+also the attribute modifiers (flags) at the end of the /disguise <mob> <modifiers>
+don't seem to work.
+
+When a player / entity that is disguised punches / attacks, the disguise does not run the punch animation (and there may be other ones too, but the attack animation doesn't work)
+
+Also, newer mobs like the warden and parched are unavailable
+
+
+
+
+if a player enters a boat that is being controlled by a disguised player, the player will believe that the boat is controlled by them, causing desync.
+
+
+
+
+
+When trying to ride a saddled pig disguised as a cow:
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 17 on entity Cow['Cow'/42727, l='ClientLevel', x=-3.52, y=-60.00, z=22.49]: old=Reference{ResourceKey[minecraft:cow_variant / minecraft:temperate]=CowVariant[modelAndTexture=ModelAndTexture[model=NORMAL, asset=ResourceTexture[id=minecraft:entity/cow/temperate_cow, texturePath=minecraft:textures/entity/cow/temperate_cow.png]], spawnConditions=SpawnPrioritySelectors[selectors=[]]]}(class net.minecraft.core.Holder$Reference), new=312(class java.lang.Integer)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:set_entity_data
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.network.protocol.PacketUtils.fillCrashReport(PacketUtils.java:41)
+	at knot//net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl.storeDisconnectionReport(ClientCommonPacketListenerImpl.java:146)
+	at knot//net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl.onPacketError(ClientCommonPacketListenerImpl.java:125)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:60)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+When disguising a happy ghast as a normal ghast and trying to stand on the solid top of the happy ghast:
+Description: Packet handling error
+
+java.lang.ArrayIndexOutOfBoundsException: Index 18 out of bounds for length 17
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:114)
+	at knot//net.minecraft.class_634.method_11093(class_634.java:665)
+	at knot//net.minecraft.class_2739.method_11808(class_2739.java:54)
+	at knot//net.minecraft.class_2739.method_65081(class_2739.java:12)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:114)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:set_entity_data
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+When disguising a saddled pig as a cow and trying to control it:
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 17 on entity class_10730['Cow'/111, l='ClientLevel', x=23.26, y=-60.00, z=10.82]: old=Reference{ResourceKey[minecraft:cow_variant / minecraft:temperate]=class_10731[modelAndTexture=class_10693[model=NORMAL, asset=class_10726[id=minecraft:entity/cow/temperate_cow, texturePath=minecraft:textures/entity/cow/temperate_cow.png]], spawnConditions=class_10702[selectors=[]]]}(class net.minecraft.class_6880$class_6883), new=957(class java.lang.Integer)
+	at knot//net.minecraft.class_2945.method_12785(class_2945.java:124)
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:115)
+	at knot//net.minecraft.class_634.method_11093(class_634.java:665)
+	at knot//net.minecraft.class_2739.method_11808(class_2739.java:54)
+	at knot//net.minecraft.class_2739.method_65081(class_2739.java:12)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_2945.method_12785(class_2945.java:124)
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:115)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:set_entity_data
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+
+
+When disguised as one of those (I'll refer to them as inanimate) entities (Boat, Minecart, Item Frame, etc...), players nearby get kicked when the disguised player picks up items:
+
+
+
+java.lang.ClassCastException: class net.minecraft.class_1695 cannot be cast to class net.minecraft.class_1309 (net.minecraft.class_1695 and net.minecraft.class_1309 are in unnamed module of loader 'knot' @64485a47)
+	at knot//net.minecraft.class_634.method_11150(class_634.java:1012)
+	at knot//net.minecraft.class_2775.method_11914(class_2775.java:40)
+	at knot//net.minecraft.class_2775.method_65081(class_2775.java:8)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:take_item_entity
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+
+
+
+
+When a disguised player pops a totem, other players get kicked: 
+Description: Packet handling error
+
+java.lang.ArrayIndexOutOfBoundsException: Index 17 out of bounds for length 17
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:114)
+	at knot//net.minecraft.class_634.method_11093(class_634.java:665)
+	at knot//net.minecraft.class_2739.method_11808(class_2739.java:54)
+	at knot//net.minecraft.class_2739.method_65081(class_2739.java:12)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:114)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:set_entity_data
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+disguising a pillager as a player, and then it start drawing it's crossbow:
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 17 on entity class_745['Grian'/128, l='ClientLevel', x=7.97, y=-60.00, z=22.84]: old=0.0(class java.lang.Float), new=true(class java.lang.Boolean)
+	at knot//net.minecraft.class_2945.method_12785(class_2945.java:124)
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:115)
+	at knot//net.minecraft.class_634.method_11093(class_634.java:665)
+	at knot//net.minecraft.class_2739.method_11808(class_2739.java:54)
+	at knot//net.minecraft.class_2739.method_65081(class_2739.java:12)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_2945.method_12785(class_2945.java:124)
+	at knot//net.minecraft.class_2945.method_12779(class_2945.java:115)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:set_entity_data
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+if someone disguises as a painting, others get kicked:
+
+
+Description: Packet handling error
+
+java.lang.IllegalArgumentException: The validated expression is false
+	at knot//org.apache.commons.lang3.Validate.isTrue(Validate.java:500)
+	at knot//net.minecraft.class_1530.method_6892(class_1530.java:64)
+	at knot//net.minecraft.class_1534.method_31471(class_1534.java:228)
+	at knot//net.minecraft.class_634.method_11112(class_634.java:605)
+	at knot//net.minecraft.class_2604.method_11178(class_2604.java:96)
+	at knot//net.minecraft.class_2604.method_65081(class_2604.java:19)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//org.apache.commons.lang3.Validate.isTrue(Validate.java:500)
+	at knot//net.minecraft.class_1530.method_6892(class_1530.java:64)
+	at knot//net.minecraft.class_1534.method_31471(class_1534.java:228)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:add_entity
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
