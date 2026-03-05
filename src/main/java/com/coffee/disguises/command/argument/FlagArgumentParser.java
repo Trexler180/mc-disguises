@@ -2,7 +2,11 @@ package com.coffee.disguises.command.argument;
 
 import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.watcher.*;
+import com.coffee.disguises.watcher.BlockStateWatcher;
+import com.coffee.disguises.watcher.MinecartWatcher;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 
 import java.util.*;
 
@@ -252,6 +256,41 @@ public class FlagArgumentParser {
                     }
                 }
 
+                // ── BlockStateWatcher (falling_block, block_display, minecarts) ──
+
+                case "setblock", "block", "blocktype", "tile" -> {
+                    if (watcher instanceof BlockStateWatcher bsw) {
+                        String raw = nextString(tokens, i);
+                        if (raw == null) {
+                            warnings.add("'setBlock' requires a block name (e.g. setBlock minecraft:diamond_block or setBlock stone).");
+                        } else {
+                            Block block = parseBlock(raw);
+                            if (block == null) {
+                                warnings.add("Unknown block '" + raw + "'. Use a namespaced ID like 'minecraft:grass_block' or a short name like 'stone'.");
+                            } else {
+                                bsw.setBlock(block);
+                            }
+                        }
+                    } else {
+                        warnings.add("'setBlock' is not applicable to " + type.getId() + ". (Only falling_block, block_display, and minecart types)");
+                    }
+                }
+
+                // ── MinecartWatcher extras ─────────────────────────────────────
+
+                case "setdisplayoffset", "displayoffset", "blockoffset", "offset" -> {
+                    if (watcher instanceof MinecartWatcher mw) {
+                        int offset = nextInt(tokens, i, -1);
+                        if (offset < 0) {
+                            warnings.add("'setDisplayOffset' requires a non-negative integer (default 6).");
+                        } else {
+                            mw.setDisplayOffset(offset);
+                        }
+                    } else {
+                        warnings.add("'setDisplayOffset' is only applicable to minecart types.");
+                    }
+                }
+
                 default ->
                         warnings.add("Unknown flag: '§e" + flag + "§7'. "
                                 + "Valid flags for §e" + type.getId() + "§7: "
@@ -335,6 +374,12 @@ public class FlagArgumentParser {
         if (wc == EndermanWatcher.class) {
             flags.add("setScreaming");
         }
+        if (isAssignable(wc, BlockStateWatcher.class)) {
+            flags.add("setBlock");
+        }
+        if (wc == MinecartWatcher.class) {
+            flags.add("setDisplayOffset");
+        }
 
         return flags;
     }
@@ -387,7 +432,33 @@ public class FlagArgumentParser {
         }
     }
 
-    /** Parses a DyeColor by name (case-insensitive). Accepts both "RED" and "red". */
+    /**
+     * Looks up a Block by name using reflection on the Blocks class.
+     *
+     * Accepts both short names ("stone", "oak_log") and namespaced IDs
+     * ("minecraft:stone") — the "minecraft:" prefix is stripped before lookup.
+     * Field names on Blocks are upper-cased, so "oak_log" → "OAK_LOG".
+     *
+     * This avoids any dependency on ResourceLocation or BuiltInRegistries,
+     * matching the reflection-first approach used by MetadataBuilder.
+     *
+     * Returns null if the block is not found.
+     */
+    private static Block parseBlock(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        // Strip namespace prefix
+        String name = raw.toLowerCase();
+        if (name.startsWith("minecraft:")) name = name.substring("minecraft:".length());
+        // Convert to upper-case field name (e.g. "oak_log" → "OAK_LOG")
+        String fieldName = name.toUpperCase();
+        try {
+            java.lang.reflect.Field f = Blocks.class.getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object val = f.get(null);
+            if (val instanceof Block block) return block;
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {}
+        return null;
+    }
     private static DyeColor parseDyeColor(String raw) {
         try {
             return DyeColor.valueOf(raw.toUpperCase());
@@ -421,12 +492,34 @@ public class FlagArgumentParser {
                  "setcollarcolor", "collarcolor", "collar",
                  "setcustomname", "customname", "name",
                  "sethealth", "health", "hp",
-                 "setsize", "size", "sz" -> true;
+                 "setsize", "size", "sz",
+                 "setblock", "block", "blocktype", "tile",
+                 "setdisplayoffset", "displayoffset", "blockoffset", "offset" -> true;
             default -> false;
         };
     }
 
     /** Returns completion suggestions for the value of a specific flag. */
+    /**
+     * Cached sorted list of all block names, built once by reflecting on the Blocks class.
+     * Using the same reflection strategy as parseBlock() — upper-case field name → lower-case id.
+     */
+    private static volatile List<String> ALL_BLOCK_NAMES = null;
+
+    private static List<String> getAllBlockNames() {
+        if (ALL_BLOCK_NAMES != null) return ALL_BLOCK_NAMES;
+        List<String> names = new ArrayList<>();
+        for (java.lang.reflect.Field f : Blocks.class.getDeclaredFields()) {
+            if (!java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+            if (!Block.class.isAssignableFrom(f.getType())) continue;
+            // Convert UPPER_SNAKE field name to lower_snake block name
+            names.add(f.getName().toLowerCase());
+        }
+        names.sort(String::compareTo);
+        ALL_BLOCK_NAMES = names;
+        return names;
+    }
+
     private static List<String> suggestValuesFor(String flag, DisguiseType type, String partial) {
         List<String> values = switch (flag.toLowerCase()) {
             case "setcolor", "color", "setcolour", "colour", "wool",
@@ -439,6 +532,10 @@ public class FlagArgumentParser {
                     List.of("1", "5", "10", "20", "40", "100");
             case "setsize", "size", "sz" ->
                     List.of("1", "2", "3", "4");
+            case "setblock", "block", "blocktype", "tile" ->
+                    getAllBlockNames();
+            case "setdisplayoffset", "displayoffset", "blockoffset", "offset" ->
+                    List.of("0", "6", "8", "12", "16");
             default -> Collections.emptyList();
         };
         return filterByPrefix(values, partial);

@@ -1,6 +1,9 @@
 package com.coffee.disguises.disguise;
 
 import com.coffee.disguises.watcher.*;
+import com.coffee.disguises.watcher.FallingBlockWatcher;
+import com.coffee.disguises.watcher.MinecartWatcher;
+import com.coffee.disguises.watcher.BlockDisplayWatcher;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.EntityType;
@@ -533,8 +536,18 @@ public enum DisguiseType {
 
     END_CRYSTAL("end_crystal", EntityType.END_CRYSTAL, FlagWatcher.class, true, null, null, null),
 
-    /** PacketInterceptor sets the data field to the sand block state ID for a default visual. */
-    FALLING_BLOCK("falling_block", EntityType.FALLING_BLOCK, FlagWatcher.class, true, null, null, null),
+    /**
+     * PacketInterceptor reads FallingBlockWatcher.getBlockId() for the AddEntityPacket data field.
+     * Defaults to STONE.  Use setBlock() on the watcher to choose any block.
+     */
+    FALLING_BLOCK("falling_block", EntityType.FALLING_BLOCK, FallingBlockWatcher.class, true, null, null, null),
+
+    /**
+     * Block Display entity (MC 1.19.4+).
+     * Renders a full-size block at the entity's position using the Display entity system.
+     * Use setBlock() on the watcher to choose the displayed block (default: STONE).
+     */
+    BLOCK_DISPLAY("block_display", EntityType.BLOCK_DISPLAY, BlockDisplayWatcher.class, true, null, null, null),
 
     GLOW_ITEM_FRAME("glow_item_frame", EntityType.GLOW_ITEM_FRAME, FlagWatcher.class, true, null, null, null),
     ITEM("item", EntityType.ITEM, FlagWatcher.class, true, null, null, null),
@@ -571,13 +584,13 @@ public enum DisguiseType {
     // INANIMATE — Minecarts
     // =========================================================================
 
-    CHEST_MINECART("chest_minecart", EntityType.CHEST_MINECART, FlagWatcher.class, true, null, null, null),
-    COMMAND_BLOCK_MINECART("command_block_minecart", EntityType.COMMAND_BLOCK_MINECART, FlagWatcher.class, true, null, null, null),
-    FURNACE_MINECART("furnace_minecart", EntityType.FURNACE_MINECART, FlagWatcher.class, true, null, null, null),
-    HOPPER_MINECART("hopper_minecart", EntityType.HOPPER_MINECART, FlagWatcher.class, true, null, null, null),
-    MINECART("minecart", EntityType.MINECART, FlagWatcher.class, true, null, null, null),
-    SPAWNER_MINECART("spawner_minecart", EntityType.SPAWNER_MINECART, FlagWatcher.class, true, null, null, null),
-    TNT_MINECART("tnt_minecart", EntityType.TNT_MINECART, FlagWatcher.class, true, null, null, null);
+    CHEST_MINECART("chest_minecart", EntityType.CHEST_MINECART, MinecartWatcher.class, true, null, null, null),
+    COMMAND_BLOCK_MINECART("command_block_minecart", EntityType.COMMAND_BLOCK_MINECART, MinecartWatcher.class, true, null, null, null),
+    FURNACE_MINECART("furnace_minecart", EntityType.FURNACE_MINECART, MinecartWatcher.class, true, null, null, null),
+    HOPPER_MINECART("hopper_minecart", EntityType.HOPPER_MINECART, MinecartWatcher.class, true, null, null, null),
+    MINECART("minecart", EntityType.MINECART, MinecartWatcher.class, true, null, null, null),
+    SPAWNER_MINECART("spawner_minecart", EntityType.SPAWNER_MINECART, MinecartWatcher.class, true, null, null, null),
+    TNT_MINECART("tnt_minecart", EntityType.TNT_MINECART, MinecartWatcher.class, true, null, null, null);
 
     // =========================================================================
     // Fields

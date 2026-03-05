@@ -248,6 +248,20 @@ public class PacketInterceptor {
             sendMetadataPacket(observer, entity, disguise);
             sendEquipmentPacket(observer, entity);
             enqueueEquipmentResend(observer, entity);
+            return;
+        }
+
+        // Minecarts: send metadata so the custom display block DataTracker fields
+        // (DISPLAY_BLOCK_STATE_ID, DISPLAY_OFFSET_ID, CUSTOM_DISPLAY_ID) reach the client.
+        if (disguise.getWatcher() instanceof com.coffee.disguises.watcher.MinecartWatcher) {
+            sendMetadataPacket(observer, entity, disguise);
+            return;
+        }
+
+        // BlockDisplay: send metadata so the block state and scale fields reach the client.
+        // Without metadata the display entity has a zero scale and is invisible.
+        if (disguise.getType() == DisguiseType.BLOCK_DISPLAY) {
+            sendMetadataPacket(observer, entity, disguise);
         }
     }
 
@@ -338,6 +352,10 @@ public class PacketInterceptor {
      */
     private static int getAddEntityData(Disguise disguise, Entity entity) {
         if (disguise.getType() == DisguiseType.FALLING_BLOCK) {
+            // If the watcher specifies a block, use it; otherwise fall back to SAND.
+            if (disguise.getWatcher() instanceof com.coffee.disguises.watcher.FallingBlockWatcher fbw) {
+                return fbw.getBlockId();
+            }
             try {
                 return net.minecraft.world.level.block.Block.getId(
                         net.minecraft.world.level.block.Blocks.SAND.defaultBlockState());
