@@ -60,7 +60,12 @@ public class DisguisesConfig {
     public boolean enforceTypePermissions = false;
 
     // ---- Permission levels (fallback when LuckPerms is absent) ----
-    public int permLevelSelf       = 0;
+    // When LuckPerms is installed these are ignored in favour of permission nodes:
+    //   disguises.disguise.self, disguises.disguise.others,
+    //   disguises.disguise.entity, disguises.disguise.radius,
+    //   disguises.viewself, disguises.type.<type>
+    // Vanilla op levels: 1=spawn-protection bypass, 2=standard commands, 3=player mgmt, 4=full admin
+    public int permLevelSelf       = 2;
     public int permLevelOthers     = 2;
     public int permLevelEntity     = 2;
     public int permLevelRadius     = 2;

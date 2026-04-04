@@ -9,6 +9,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.animal.wolf.Wolf;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
@@ -114,6 +115,9 @@ public class MetadataBuilder {
     // the accessor type is EntityDataAccessor<BlockState>, NOT <Integer>.
     private static Field F_BLOCK_DISPLAY_BLOCK_STATE;
 
+    // Entity pose (Pose enum, index 6)
+    private static Field F_ENTITY_POSE;
+
     // Display base — scale field (Vector3f, index 12 in 1.21.x)
     // Sending (1,1,1) is required; the default is (0,0,0) which makes the entity invisible.
     private static Field F_DISPLAY_SCALE;
@@ -126,6 +130,7 @@ public class MetadataBuilder {
     private static final int IDX_ENTITY_CUSTOM_NAME_VISIBLE  = 3;
     private static final int IDX_ENTITY_SILENT               = 4;
     private static final int IDX_ENTITY_NO_GRAVITY           = 5;
+    private static final int IDX_ENTITY_POSE                 = 6;
 
     private static final int IDX_LIVING_FLAGS                = 8;
     private static final int IDX_LIVING_HEALTH               = 9;
@@ -142,13 +147,16 @@ public class MetadataBuilder {
 
     private static final int IDX_SLIME_SIZE                  = 16;
 
-    private static final int IDX_TAMEABLE_FLAGS              = 16;
-    private static final int IDX_WOLF_COLLAR_COLOR           = 18;
-    private static final int IDX_WOLF_ANGER_TIME             = 19;
+    // TamableAnimal and Wolf: indices shift up because AgeableMob.DATA_BABY_ID occupies 16,
+    // TamableAnimal adds DATA_FLAGS_ID(17) and DATA_OWNERUUID_ID(18), then Wolf adds its
+    // own fields starting at 19.  Name-based lookup is preferred; IDX_* are fallback-only.
+    private static final int IDX_TAMEABLE_FLAGS              = 17; // TamableAnimal.DATA_FLAGS_ID
+    private static final int IDX_WOLF_COLLAR_COLOR           = 20; // Wolf.DATA_COLLAR_COLOR
+    private static final int IDX_WOLF_ANGER_TIME             = 21; // Wolf.DATA_ANGER_END_TIME (Long in 1.21.11)
 
     private static final int IDX_ENDERMAN_CREEPY             = 17;
 
-    private static final int IDX_PLAYER_SKIN_PARTS           = 17; // DATA_PLAYER_MODE_CUSTOMISATION
+    private static final int IDX_PLAYER_SKIN_PARTS           = 16; // DATA_PLAYER_MODE_CUSTOMISATION (Avatar index in 1.21.11)
 
     // AbstractMinecart (indices relative to full entity hierarchy — approximately 11–13 in 1.21.x)
     private static final int IDX_MINECART_DISPLAY_BLOCK   = 11;
@@ -176,6 +184,7 @@ public class MetadataBuilder {
         F_ENTITY_CUSTOM_NAME_VISIBLE = resolve(Entity.class,        IDX_ENTITY_CUSTOM_NAME_VISIBLE,  "DATA_CUSTOM_NAME_VISIBLE");
         F_ENTITY_SILENT              = resolve(Entity.class,        IDX_ENTITY_SILENT,              "DATA_SILENT");
         F_ENTITY_NO_GRAVITY          = resolve(Entity.class,        IDX_ENTITY_NO_GRAVITY,          "DATA_NO_GRAVITY");
+        F_ENTITY_POSE                = resolve(Entity.class,        IDX_ENTITY_POSE,                "DATA_POSE");
 
         F_LIVING_FLAGS         = resolve(LivingEntity.class, IDX_LIVING_FLAGS,         "DATA_LIVING_ENTITY_FLAGS", "DATA_LIVING_FLAGS");
         F_LIVING_HEALTH        = resolve(LivingEntity.class, IDX_LIVING_HEALTH,        "DATA_HEALTH_ID",           "DATA_HEALTH");
@@ -184,17 +193,10 @@ public class MetadataBuilder {
 
         F_AGEABLE_BABY = resolve(AgeableMob.class, IDX_AGEABLE_BABY, "DATA_BABY_ID", "IS_BABY");
 
-        // Sheep — may have moved to sub-package in 1.21
-        Class<?> sheepClass = loadClass(
-                "net.minecraft.world.entity.animal.sheep.Sheep",   // 1.21+
-                "net.minecraft.world.entity.animal.Sheep"          // <1.21
-        );
-        if (sheepClass != null) {
-            F_SHEEP_COLOR = resolve(sheepClass, IDX_SHEEP_COLOR,
-                    "DATA_WOOL_ID", "DATA_SHEARED_ID", "DATA_SHEEP_FLAGS", "DATA_COLOR_ID");
-        } else {
-            com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] Sheep class not found — color/sheared flags will not work.");
-        }
+        // Sheep — use the class literal so Loom correctly remaps it in the production jar.
+        // (String-based loadClass is NOT remapped and fails at runtime on a Fabric server.)
+        F_SHEEP_COLOR = resolve(Sheep.class, IDX_SHEEP_COLOR,
+                "DATA_WOOL_ID", "DATA_SHEARED_ID", "DATA_SHEEP_FLAGS", "DATA_COLOR_ID");
 
         F_CREEPER_SWELL_DIR = resolve(Creeper.class, IDX_CREEPER_SWELL_DIR, "DATA_SWELL_DIR",  "DATA_SWELL_DIRECTION");
         F_CREEPER_POWERED   = resolve(Creeper.class, IDX_CREEPER_POWERED,   "DATA_IS_POWERED", "DATA_POWERED");
@@ -204,11 +206,21 @@ public class MetadataBuilder {
 
         F_TAMEABLE_FLAGS    = resolve(TamableAnimal.class, IDX_TAMEABLE_FLAGS,    "DATA_FLAGS_ID",             "DATA_TAME_FLAGS");
         F_WOLF_COLLAR_COLOR = resolve(Wolf.class,          IDX_WOLF_COLLAR_COLOR, "DATA_COLLAR_COLOR",         "DATA_COLLAR_COLOR_ID");
-        F_WOLF_ANGER_TIME   = resolve(Wolf.class,          IDX_WOLF_ANGER_TIME,   "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
+        // DATA_ANGER_END_TIME is a Long (game-tick timestamp) in 1.21.11, renamed from the old
+        // integer "ticks remaining" field.  List the 1.21.11 name first; older names follow.
+        F_WOLF_ANGER_TIME   = resolve(Wolf.class,          IDX_WOLF_ANGER_TIME,   "DATA_ANGER_END_TIME", "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
 
         F_ENDERMAN_CREEPY = resolve(EnderMan.class, IDX_ENDERMAN_CREEPY, "DATA_CREEPY", "DATA_CREEPY_STARE", "DATA_IS_SCREAMING");
 
-        // Player skin parts — check Player then ServerPlayer
+        // Player skin parts — in MC 1.21.11 DATA_PLAYER_MODE_CUSTOMISATION (Byte) moved to the
+        // new Avatar intermediate class (Avatar extends LivingEntity, Player extends Avatar).
+        // Force-initialize Avatar so its static EntityDataAccessor fields are non-null before we
+        // resolve; otherwise name lookup returns null and the index scan falls through to
+        // Player.DATA_PLAYER_ABSORPTION_ID (Float) at index 17, causing a cast crash on encode.
+        try {
+            Class.forName("net.minecraft.world.entity.player.Avatar", true,
+                    net.minecraft.world.entity.player.Player.class.getClassLoader());
+        } catch (Exception ignored) {}
         F_PLAYER_SKIN_PARTS = resolve(net.minecraft.world.entity.player.Player.class,
                 IDX_PLAYER_SKIN_PARTS,
                 "DATA_PLAYER_MODE_CUSTOMISATION", "DATA_SKIN_PARTS", "DATA_PLAYER_SKIN_CUSTOMISATION");
@@ -238,11 +250,9 @@ public class MetadataBuilder {
             com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] AbstractMinecart class not found — minecart block display will not work.");
         }
 
-        // BlockDisplay — block state field
-        Class<?> blockDisplayClass = loadClass(
-                "net.minecraft.world.entity.Display$BlockDisplay",
-                "net.minecraft.world.entity.display.BlockDisplay"
-        );
+        // BlockDisplay — use a class literal so Loom remaps it correctly in production.
+        // (String-based loadClass is NOT remapped by Loom and fails on a Fabric server.)
+        Class<?> blockDisplayClass = net.minecraft.world.entity.Display.BlockDisplay.class;
         if (blockDisplayClass != null) {
             // CRITICAL: Force the Display base class to fully initialize so its static
             // initializer runs and registers VECTOR3 / QUATERNION into the
@@ -274,12 +284,11 @@ public class MetadataBuilder {
                 F_DISPLAY_SCALE = resolve(blockDisplayClass, IDX_DISPLAY_SCALE,
                         "DATA_SCALE_ID", "DATA_SCALE", "SCALE_ID");
             }
-        } else {
-            com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] BlockDisplay class not found — block_display disguise will not show block.");
         }
 
         // Summary
         logResolution("Entity flags",          F_ENTITY_FLAGS);
+        logResolution("Entity pose",           F_ENTITY_POSE);
         logResolution("Entity customName",     F_ENTITY_CUSTOM_NAME);
         logResolution("LivingEntity flags",    F_LIVING_FLAGS);
         logResolution("LivingEntity health",   F_LIVING_HEALTH);
@@ -289,6 +298,7 @@ public class MetadataBuilder {
         logResolution("Creeper powered",       F_CREEPER_POWERED);
         logResolution("Slime size",            F_SLIME_SIZE);
         logResolution("Wolf collarColor",      F_WOLF_COLLAR_COLOR);
+        logResolution("Wolf angerTime",        F_WOLF_ANGER_TIME);
         logResolution("Enderman creepy",       F_ENDERMAN_CREEPY);
         logResolution("Player skinParts",      F_PLAYER_SKIN_PARTS);
         logResolution("Minecart displayBlock",  F_MINECART_DISPLAY_BLOCK);
@@ -475,7 +485,9 @@ public class MetadataBuilder {
         if (watcher instanceof WolfWatcher ww) {
             putByte(list, F_TAMEABLE_FLAGS,    ww.getTameableFlags());
             putInt(list,  F_WOLF_COLLAR_COLOR, ww.getCollarColor().getId());
-            putInt(list,  F_WOLF_ANGER_TIME,   ww.isAngry() ? 400 : 0);
+            // DATA_ANGER_END_TIME changed from int (ticks-remaining) to long (game-tick timestamp)
+            // in 1.21.11.  Use Long.MAX_VALUE as "angry forever", -1L as "not angry" (vanilla default).
+            putLong(list, F_WOLF_ANGER_TIME,   ww.isAngry() ? Long.MAX_VALUE : -1L);
         }
 
         // ── Enderman ──────────────────────────────────────────────────────────
@@ -487,8 +499,24 @@ public class MetadataBuilder {
         // ── Player skin-layer customisation ───────────────────────────────────
         // 0x7F = all outer layers visible (cape, jacket, sleeves, pants, hat)
 
-        if (type == com.coffee.disguises.disguise.DisguiseType.PLAYER) {
-            putByte(list, F_PLAYER_SKIN_PARTS, (byte) 0x7F);
+        if (type == com.coffee.disguises.disguise.DisguiseType.PLAYER && F_PLAYER_SKIN_PARTS != null) {
+            // Guard: verify the resolved accessor actually uses the BYTE serializer before emitting.
+            // In 1.21.11 the Avatar class introduced an index shift; if resolution picked the wrong
+            // field (e.g. DATA_PLAYER_ABSORPTION_ID which is a Float at index 17), encoding a Byte
+            // value through a Float serializer causes a ClassCastException in Netty.
+            try {
+                EntityDataAccessor<?> skinAcc = (EntityDataAccessor<?>) F_PLAYER_SKIN_PARTS.get(null);
+                if (skinAcc != null && skinAcc.serializer() == EntityDataSerializers.BYTE) {
+                    putByte(list, F_PLAYER_SKIN_PARTS, (byte) 0x7F);
+                } else {
+                    com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                            "[MetadataBuilder] Skipping skin-parts byte: resolved accessor at index {} has unexpected serializer {}",
+                            skinAcc != null ? skinAcc.id() : -1,
+                            skinAcc != null ? skinAcc.serializer() : "null");
+                }
+            } catch (Exception e) {
+                com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] Skin-parts guard failed: {}", e.getMessage());
+            }
         }
 
         // ── Minecart custom display block ─────────────────────────────────────
@@ -513,6 +541,39 @@ public class MetadataBuilder {
             putBlockState(list, F_BLOCK_DISPLAY_BLOCK_STATE, bdw.getBlockState());
         }
 
+        return list;
+    }
+
+    /**
+     * Builds a minimal DataValue list containing just the shared entity-flags byte and pose.
+     * Used by the self-view puppet sync to propagate crouching, sprinting, swimming, and
+     * elytra state from the real player to the puppet every tick.
+     */
+    public static List<SynchedEntityData.DataValue<?>> buildEntityStateUpdate(
+            byte entityFlags, net.minecraft.world.entity.Pose pose) {
+        if (!initialized) init();
+        List<SynchedEntityData.DataValue<?>> list = new ArrayList<>();
+        putByte(list, F_ENTITY_FLAGS, entityFlags);
+        putPose(list, F_ENTITY_POSE, pose);
+        return list;
+    }
+
+    /**
+     * Builds a DataValue list that assigns a hidden custom name to an entity.
+     *
+     * The name is written into DATA_CUSTOM_NAME (index 2) but DATA_CUSTOM_NAME_VISIBLE
+     * (index 3) is set to {@code false}, so it is never rendered in-game. Its sole
+     * purpose is to give the entity a scoreboard-visible name so that the client's
+     * {@code Entity.getScoreboardName()} returns this string, enabling team membership
+     * for the collision-suppression team sent alongside self-view puppets.
+     *
+     * Returns an empty list if the required accessor fields could not be resolved.
+     */
+    public static List<SynchedEntityData.DataValue<?>> buildHiddenName(String name) {
+        if (!initialized) init();
+        List<SynchedEntityData.DataValue<?>> list = new ArrayList<>();
+        putOptComponent(list, F_ENTITY_CUSTOM_NAME, Optional.of(Component.literal(name)));
+        putBool(list, F_ENTITY_CUSTOM_NAME_VISIBLE, false);
         return list;
     }
 
@@ -723,12 +784,19 @@ public class MetadataBuilder {
     private static void putFloat(List<SynchedEntityData.DataValue<?>> list, Field f, float value) {
         put(list, f, value);
     }
+    private static void putLong(List<SynchedEntityData.DataValue<?>> list, Field f, long value) {
+        put(list, f, value);
+    }
     private static void putOptComponent(List<SynchedEntityData.DataValue<?>> list,
                                         Field f, Optional<net.minecraft.network.chat.Component> value) {
         put(list, f, value);
     }
     private static void putBlockState(List<SynchedEntityData.DataValue<?>> list, Field f,
                                       net.minecraft.world.level.block.state.BlockState value) {
+        put(list, f, value);
+    }
+    private static void putPose(List<SynchedEntityData.DataValue<?>> list, Field f,
+                                net.minecraft.world.entity.Pose value) {
         put(list, f, value);
     }
     private static void putVector3f(List<SynchedEntityData.DataValue<?>> list, Field f,
@@ -745,4 +813,5 @@ public class MetadataBuilder {
                     f.getName(), e.getMessage());
         }
     }
+
 }

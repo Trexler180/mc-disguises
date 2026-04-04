@@ -38,6 +38,14 @@ public class DisguiseManager {
     /** Active disguises: entity UUID → Disguise. */
     private final ConcurrentHashMap<UUID, Disguise> activeDisguises = new ConcurrentHashMap<>();
 
+    /**
+     * Players whose self-view preference is ON.  This persists across disguise changes
+     * and undisguise so that re-disguising automatically re-enables the puppet.
+     * Updated by: applyDisguise (carry-over), removeDisguise (save on undisguise),
+     * and the /disguise viewself command (explicit toggle).
+     */
+    private final java.util.Set<UUID> selfViewPrefs = ConcurrentHashMap.newKeySet();
+
     private static final Path PERSIST_PATH =
             FabricLoader.getInstance().getConfigDir().resolve("disguises-persisted.json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -83,23 +91,41 @@ public class DisguiseManager {
      *
      * @return true if the disguise was applied, false if cancelled.
      */
+    /**
+     * Gets or sets the per-player self-view preference (survives disguise change / undisguise).
+     * Called by the /disguise viewself command when the player explicitly toggles self-view.
+     */
+    public void setSelfViewPref(UUID uuid, boolean enabled) {
+        if (enabled) selfViewPrefs.add(uuid);
+        else selfViewPrefs.remove(uuid);
+    }
+
     public boolean applyDisguise(Entity entity, Disguise disguise) {
         // Fire before-event (cancellable)
         if (!DisguiseEvents.BEFORE_DISGUISE.invoker().onBeforeDisguise(entity, disguise)) {
             return false;
         }
 
+        // ── Carry over self-view preference ──────────────────────────────────
+        // If the player previously had self-view on (either in their last disguise or stored
+        // as a preference), automatically enable it on the new disguise so the puppet stays
+        // visible when changing disguise or re-disguising after /undisguise.
+        if (entity instanceof ServerPlayer player) {
+            UUID uuid = player.getUUID();
+            Disguise prev = activeDisguises.get(uuid);
+            boolean pref = selfViewPrefs.contains(uuid)
+                    || (prev != null && prev.isSelfDisguise());
+            if (pref && !disguise.isSelfDisguise()) {
+                disguise.setSelfDisguise(true);
+            }
+            // Keep pref in sync with the effective self-view setting of the new disguise
+            setSelfViewPref(uuid, disguise.isSelfDisguise());
+        }
+
         activeDisguises.put(entity.getUUID(), disguise);
 
-        // Refresh for all other nearby players
+        // Refresh for all nearby players (includes self-view puppet via refreshForNearbyPlayers)
         PacketInterceptor.refreshForNearbyPlayers(entity, disguise);
-
-        // Apply self-view if the disguised entity is a player and self-view is requested.
-        // refreshForNearbyPlayers already skips the player themselves (player == entity),
-        // so we handle the self case explicitly here.
-        if (disguise.isSelfDisguise() && entity instanceof ServerPlayer player) {
-            PacketInterceptor.applySelfView(player, disguise);
-        }
 
         // Show action bar to the disguised player
         if (entity instanceof ServerPlayer player && DisguisesMod.CONFIG.showDisguiseActionBar) {
@@ -145,9 +171,13 @@ public class DisguiseManager {
             PacketInterceptor.refreshForNearbyPlayers(entity, null);
         }
 
-        // Restore vanilla self-view if it was active
-        if (wasSelfDisguise && entity instanceof ServerPlayer player) {
-            PacketInterceptor.removeSelfView(player);
+        // Restore vanilla self-view if it was active; save the preference so it is
+        // automatically re-applied the next time the player disguises.
+        if (entity instanceof ServerPlayer player) {
+            setSelfViewPref(player.getUUID(), wasSelfDisguise);
+            if (wasSelfDisguise) {
+                PacketInterceptor.removeSelfView(player);
+            }
         }
 
         DisguiseEvents.AFTER_UNDISGUISE.invoker().onAfterUndisguise(entity);
