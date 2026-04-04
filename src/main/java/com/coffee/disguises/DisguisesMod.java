@@ -54,6 +54,8 @@ public class DisguisesMod implements ModInitializer {
         //
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             PacketInterceptor.flushPendingEquipment(server);
+            PacketInterceptor.syncVanishedDisguisedPositions(server);
+            PacketInterceptor.syncSelfViewPuppets(server);
 
             if (!CONFIG.showDisguiseActionBar) return;
             if (server.getTickCount() % 20 != 0) return;

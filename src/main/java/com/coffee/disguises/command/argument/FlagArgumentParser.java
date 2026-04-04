@@ -350,7 +350,8 @@ public class FlagArgumentParser {
 
         List<String> flags = new ArrayList<>(List.of(
                 "setFire", "setInvisible", "setGlowing", "setSilent", "setNoGravity",
-                "setCrouching", "setSprinting", "setCustomName", "setCustomNameVisible"
+                "setCrouching", "setSprinting", "setSwimming",
+                "setCustomName", "setCustomNameVisible"
         ));
 
         if (isAssignable(wc, LivingEntityWatcher.class)) {

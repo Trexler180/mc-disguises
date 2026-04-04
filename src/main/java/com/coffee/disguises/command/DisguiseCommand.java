@@ -154,12 +154,32 @@ public class DisguiseCommand {
                                 )
                         )
 
-                        // ── /disguise radius <num> <type> [flags] ─────────────────────
+                        // ── /disguise radius <num> <type|player> [name] [flags] ───────
                         // Disguise all entities within radius of the command source.
                         .then(Commands.literal("radius")
                                 .requires(Permissions.require("disguises.disguise.radius",
                                         DisguisesMod.CONFIG.permLevelRadius))
                                 .then(Commands.argument("radius", DoubleArgumentType.doubleArg(0.5, 256.0))
+                                        // radius → player <skinName> [flags]
+                                        .then(Commands.literal("player")
+                                                .then(Commands.argument("skinName", StringArgumentType.word())
+                                                        .executes(ctx -> {
+                                                            double radius = DoubleArgumentType.getDouble(ctx, "radius");
+                                                            String skin = StringArgumentType.getString(ctx, "skinName");
+                                                            return disguiseRadiusAsPlayer(ctx.getSource(), radius, skin, "");
+                                                        })
+                                                        .then(Commands.argument("flags", StringArgumentType.greedyString())
+                                                                .suggests(DisguiseTypeArgument::suggestFlags)
+                                                                .executes(ctx -> {
+                                                                    double radius = DoubleArgumentType.getDouble(ctx, "radius");
+                                                                    String skin = StringArgumentType.getString(ctx, "skinName");
+                                                                    String flags = StringArgumentType.getString(ctx, "flags");
+                                                                    return disguiseRadiusAsPlayer(ctx.getSource(), radius, skin, flags);
+                                                                })
+                                                        )
+                                                )
+                                        )
+                                        // radius → <type> [flags]
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests(DisguiseTypeArgument::suggest)
                                                 .executes(ctx -> {
@@ -525,6 +545,47 @@ public class DisguiseCommand {
         return finalCount;
     }
 
+    private static int disguiseRadiusAsPlayer(CommandSourceStack source, double radius,
+                                              String skinName, String flagString) {
+        if (!isTypeAllowed(source, DisguiseType.PLAYER)) return 0;
+
+        if (!(source.getLevel() instanceof ServerLevel level)) return 0;
+
+        AABB box = AABB.ofSize(source.getPosition(), radius * 2, radius * 2, radius * 2);
+        List<Entity> entities = level.getEntitiesOfClass(Entity.class, box);
+
+        int count = 0;
+        for (Entity entity : entities) {
+            if (entity == source.getEntity()) continue;
+
+            FlagWatcher watcher = DisguiseType.PLAYER.createDefaultWatcher();
+            ParseResult parsed = parseFlags(flagString, watcher, DisguiseType.PLAYER);
+
+            PlayerDisguise.PlayerBuilder pb = PlayerDisguise.builder(skinName);
+            pb.watcher(watcher);
+            pb.showName(parsed.showName());
+            PlayerDisguise disguise = pb.build();
+
+            if (DisguiseManager.INSTANCE.applyDisguise(entity, disguise)) {
+                count++;
+                // Async skin fetch; refresh when it arrives
+                final Entity fe = entity;
+                SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
+                    if (profile != null) {
+                        disguise.setSkinProfile(profile);
+                        PacketInterceptor.refreshForNearbyPlayers(fe, disguise);
+                    }
+                });
+            }
+        }
+
+        final int finalCount = count;
+        source.sendSuccess(() -> Component.literal(
+                "§aDisguised §e" + finalCount + " §aentities as player §e" + skinName
+                        + "§a, fetching skin…"), true);
+        return finalCount;
+    }
+
     // =========================================================================
     // Modify active disguise
     // =========================================================================
@@ -580,6 +641,9 @@ public class DisguiseCommand {
         } else {
             PacketInterceptor.removeSelfView(player);
         }
+
+        // Persist the preference so changing or re-applying a disguise inherits this setting
+        DisguiseManager.INSTANCE.setSelfViewPref(player.getUUID(), newValue);
 
         source.sendSuccess(() -> Component.literal(
                 "§7Self-disguise view: " + (newValue ? "§aON" : "§cOFF")), false);
