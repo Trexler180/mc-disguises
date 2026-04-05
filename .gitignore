@@ -38,3 +38,13 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# development artifacts
+
+issues.txt
+server_run.log
+*.log
+
+# claude / IDE workspace config
+
+.claude/
