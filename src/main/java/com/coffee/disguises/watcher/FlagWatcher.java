@@ -1,9 +1,13 @@
 package com.coffee.disguises.watcher;
 
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Holds the metadata flags for a disguise.
@@ -24,6 +28,9 @@ public class FlagWatcher {
     protected boolean silent            = false;
     protected boolean noGravity         = false;
 
+    /** Optional per-slot item overrides. Null means "use the real entity's equipment". */
+    protected Map<EquipmentSlot, ItemStack> customEquipment = null;
+
     // ---- Setters ----
     public FlagWatcher setOnFire(boolean v)           { this.onFire = v; return this; }
     public FlagWatcher setCrouching(boolean v)         { this.crouching = v; return this; }
@@ -37,6 +44,16 @@ public class FlagWatcher {
     public FlagWatcher setSilent(boolean v)            { this.silent = v; return this; }
     public FlagWatcher setNoGravity(boolean v)         { this.noGravity = v; return this; }
 
+    public FlagWatcher setCustomEquipment(EquipmentSlot slot, ItemStack item) {
+        if (customEquipment == null) customEquipment = new EnumMap<>(EquipmentSlot.class);
+        if (item == null || item.isEmpty()) {
+            customEquipment.remove(slot);
+        } else {
+            customEquipment.put(slot, item);
+        }
+        return this;
+    }
+
     // ---- Getters ----
     public boolean isOnFire()            { return onFire; }
     public boolean isCrouching()         { return crouching; }
@@ -49,6 +66,9 @@ public class FlagWatcher {
     public boolean isCustomNameVisible() { return customNameVisible; }
     public boolean isSilent()            { return silent; }
     public boolean isNoGravity()         { return noGravity; }
+
+    /** Returns the custom equipment map, or null if no overrides have been set. */
+    public Map<EquipmentSlot, ItemStack> getCustomEquipment() { return customEquipment; }
 
     /**
      * Must be public — MetadataBuilder calls this from a different package.

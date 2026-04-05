@@ -117,6 +117,52 @@ public class PacketInterceptor {
     /** Cached reflection field for ClientboundAnimatePacket.action (int). */
     private static volatile java.lang.reflect.Field ANIMATE_ACTION_FIELD;
 
+    /**
+     * Returns the action value from a {@link ClientboundAnimatePacket} without needing
+     * a public getter.  Uses reflection with name-based fallback.
+     *
+     * Known action constants (MC 1.21.x):
+     *   0 = SWING_MAIN_HAND
+     *   2 = WAKE_UP_PLAYER  ← casts to AbstractClientPlayer, crashes non-player disguises
+     *   3 = SWING_OFF_HAND
+     *   4 = CRITICAL_HIT
+     *   5 = MAGIC_CRITICAL_HIT
+     *
+     * @return the action int, or -1 on failure
+     */
+    public static int getAnimateAction(ClientboundAnimatePacket pkt) {
+        java.lang.reflect.Field f = ANIMATE_ACTION_FIELD;
+        if (f == null) {
+            for (String name : new String[]{"action", "b", "f_135563_"}) {
+                try {
+                    java.lang.reflect.Field candidate =
+                            ClientboundAnimatePacket.class.getDeclaredField(name);
+                    if (candidate.getType() == int.class) {
+                        candidate.setAccessible(true);
+                        ANIMATE_ACTION_FIELD = f = candidate;
+                        break;
+                    }
+                } catch (NoSuchFieldException ignored) {}
+            }
+            if (f == null) {
+                // Scan: skip first int field (entity id), take the second (action)
+                java.lang.reflect.Field first = null;
+                for (java.lang.reflect.Field candidate :
+                        ClientboundAnimatePacket.class.getDeclaredFields()) {
+                    if (candidate.getType() == int.class) {
+                        if (first == null) { first = candidate; continue; }
+                        candidate.setAccessible(true);
+                        ANIMATE_ACTION_FIELD = f = candidate;
+                        break;
+                    }
+                }
+            }
+        }
+        if (f == null) return -1;
+        try { return f.getInt(pkt); }
+        catch (Exception e) { return -1; }
+    }
+
     /** Last fixed-point position sent per disguised entity per observer, for movement sync. */
     private static final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, long[]>> lastSyncPos =
             new ConcurrentHashMap<>();
@@ -352,6 +398,27 @@ public class PacketInterceptor {
         removeSelfViewPuppetIfPresent(player);
     }
 
+    /**
+     * Transfers the self-view puppet from {@code oldPlayer} to {@code newPlayer}
+     * after a death-respawn or dimension-transfer when the disguise is kept.
+     *
+     * The old player's connection is gone after respawn; sending a remove packet
+     * would silently fail or go nowhere.  Instead we just discard the stale state
+     * and spawn a fresh puppet on the new connection.
+     *
+     * @param oldPlayer  the pre-respawn ServerPlayer instance (connection may be closed)
+     * @param newPlayer  the post-respawn ServerPlayer instance (active connection)
+     * @param disguise   the current disguise (must have isSelfDisguise()==true)
+     */
+    public static void transferSelfView(ServerPlayer oldPlayer, ServerPlayer newPlayer,
+                                        Disguise disguise) {
+        // Silently discard the stale puppet entry — no packets to the dead connection.
+        selfViewPuppets.remove(oldPlayer.getUUID());
+        lastPuppetState.remove(oldPlayer.getUUID());
+        // Spawn a fresh puppet on the new player's active connection.
+        applySelfView(newPlayer, disguise);
+    }
+
     /** Internal: despawn the puppet for this player, if one exists, and clear the map entry. */
     private static void removeSelfViewPuppetIfPresent(ServerPlayer player) {
         SelfViewPuppet puppet = selfViewPuppets.remove(player.getUUID());
@@ -490,6 +557,11 @@ public class PacketInterceptor {
 
     public static void sendDisguisedSpawn(ServerPlayer observer, Entity entity, Disguise disguise) {
         if (VanishCompat.isVanishedFrom(entity, observer)) return;
+
+        // Observer-specific disguise takes priority over the default disguise
+        Disguise observerOverride = DisguiseManager.INSTANCE.getDisguiseForObserver(entity, observer.getUUID());
+        if (observerOverride != null) disguise = observerOverride;
+
         if (!DisguiseEvents.BEFORE_SEND_SPAWN.invoker().onBeforeSendSpawn(observer, entity, disguise)) return;
 
         if (disguise instanceof PlayerDisguise pd) {
@@ -498,6 +570,33 @@ public class PacketInterceptor {
             sendInanimateDisguiseSpawn(observer, entity, disguise);
         } else {
             sendMobDisguiseSpawn(observer, entity, disguise);
+        }
+    }
+
+    /**
+     * Re-sends remove + spawn packets to a single observer, using whatever disguise
+     * (default or observer-specific) applies to that observer.
+     *
+     * Useful after calling {@link DisguiseManager#setObserverDisguise} or
+     * {@link DisguiseManager#removeObserverDisguise} to push the change immediately.
+     *
+     * @param observer  the player whose view should be refreshed
+     * @param entity    the disguised entity
+     */
+    public static void refreshForObserver(ServerPlayer observer, Entity entity) {
+        if (observer == entity) return;  // can't refresh self via entity packets
+        SENDING_DISGUISE_REMOVE.set(true);
+        try { observer.connection.send(new ClientboundRemoveEntitiesPacket(entity.getId())); }
+        finally { SENDING_DISGUISE_REMOVE.set(false); }
+
+        // Determine which disguise this observer should see
+        Disguise disguise = DisguiseManager.INSTANCE.getDisguiseForObserver(entity, observer.getUUID());
+        if (disguise == null) disguise = DisguiseManager.INSTANCE.getDisguise(entity);
+
+        if (disguise != null) {
+            sendDisguisedSpawn(observer, entity, disguise);
+        } else {
+            sendVanillaRespawn(observer, entity);
         }
     }
 
@@ -645,6 +744,14 @@ public class PacketInterceptor {
                 return 0;
             }
         }
+        if (disguise.getType() == DisguiseType.EXPERIENCE_ORB) {
+            // data = experience value, determines which orb texture size the client renders.
+            // 1 = tiny orb (1 xp), 7 = small orb (≥7 xp), 37 = medium, 149 = large, etc.
+            return 7;
+        }
+        // NOTE: PAINTING is intentionally absent from DisguiseType (excluded).
+        // Painting AddEntityPacket requires a valid block-face to hang on;
+        // the client crashes with Validate.isTrue if none exists in open air.
         return 0;
     }
 
@@ -760,13 +867,20 @@ public class PacketInterceptor {
 
     /**
      * Sends equipment for a puppet entity (arbitrary int ID).
-     * Reads slot contents from {@code source} but addresses the packet to {@code entityId}.
+     * Reads slot contents from {@code source}, applying any custom equipment from
+     * the source entity's active disguise.
      */
     private static void sendEquipmentPacketToId(ServerPlayer observer, int entityId,
                                                 LivingEntity source) {
+        Disguise disguise = DisguiseManager.INSTANCE.getDisguise(source);
+        java.util.Map<EquipmentSlot, ItemStack> custom =
+                (disguise != null) ? disguise.getWatcher().getCustomEquipment() : null;
         List<com.mojang.datafixers.util.Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            equipment.add(com.mojang.datafixers.util.Pair.of(slot, source.getItemBySlot(slot).copy()));
+            ItemStack item = (custom != null && custom.containsKey(slot))
+                    ? custom.get(slot).copy()
+                    : source.getItemBySlot(slot).copy();
+            equipment.add(com.mojang.datafixers.util.Pair.of(slot, item));
         }
         observer.connection.send(new ClientboundSetEquipmentPacket(entityId, equipment));
     }
@@ -929,9 +1043,15 @@ public class PacketInterceptor {
 
     private static void sendEquipmentPacket(ServerPlayer observer, Entity entity) {
         if (!(entity instanceof LivingEntity living)) return;
+        Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
+        java.util.Map<EquipmentSlot, ItemStack> custom =
+                (disguise != null) ? disguise.getWatcher().getCustomEquipment() : null;
         List<com.mojang.datafixers.util.Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            equipment.add(com.mojang.datafixers.util.Pair.of(slot, living.getItemBySlot(slot).copy()));
+            ItemStack item = (custom != null && custom.containsKey(slot))
+                    ? custom.get(slot).copy()
+                    : living.getItemBySlot(slot).copy();
+            equipment.add(com.mojang.datafixers.util.Pair.of(slot, item));
         }
         observer.connection.send(new ClientboundSetEquipmentPacket(entity.getId(), equipment));
     }

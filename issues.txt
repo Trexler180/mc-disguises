@@ -1,22 +1,81 @@
-cant disguise as ender dragon
 
-drawing a bow does not show a drawing bow on the disguised entity (specifically the skeleton)
+dying and respawning messes up viewself
 
-
-also the attribute modifiers (flags) at the end of the /disguise <mob> <modifiers>
-don't seem to work.
-
-When a player / entity that is disguised punches / attacks, the disguise does not run the punch animation (and there may be other ones too, but the attack animation doesn't work)
-
-Also, newer mobs like the warden and parched are unavailable
+spectator mode
 
 
+getting up from sleeping as a disguised entity, like a pillager
+
+Time: 2026-04-04 01:58:28
+Description: Packet handling error
+
+java.lang.ClassCastException: class net.minecraft.class_1604 cannot be cast to class net.minecraft.class_1657 (net.minecraft.class_1604 and net.minecraft.class_1657 are in unnamed module of loader 'knot' @64485a47)
+	at knot//net.minecraft.class_634.method_11160(class_634.java:1130)
+	at knot//net.minecraft.class_2616.method_11268(class_2616.java:44)
+	at knot//net.minecraft.class_2616.method_65081(class_2616.java:10)
+	at knot//net.minecraft.class_11980$class_11981.mixinextras$bridge$method_65081$8(class_11980.java)
+	at knot//net.minecraft.class_11980$class_11981.wrapOperation$blj000$exploitpreventer$ep$handle(class_11980.java:518)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
 
 
-if a player enters a boat that is being controlled by a disguised player, the player will believe that the boat is controlled by them, causing desync.
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_634.method_11160(class_634.java:1130)
+	at knot//net.minecraft.class_2616.method_11268(class_2616.java:44)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:animate
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:41)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:146)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:125)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1337)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+-- Connection --
+Details:
+	Protocol: play
+	Flow: CLIENTBOUND
+	Is Local: false
+	Server type: OTHER
+	Server brand: fabric
 
 
 
+
+
+
+
+
+ender dragon is backwards when diguised as it
 
 
 When trying to ride a saddled pig disguised as a cow:
@@ -405,3 +464,152 @@ Stacktrace:
 	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
 	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:61)
 	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28)
+
+
+
+attacking a boat disguised as a player:
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 8 on entity RemotePlayer['Dinnerbone'/20299, l='ClientLevel', x=-43.45, y=-60.00, z=25.73]: old=0(class java.lang.Byte), new=10(class java.lang.Integer)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+
+putting an item in an item frame diguised as a player:
+
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 9 on entity RemotePlayer['Dinnerbone'/20435, l='ClientLevel', x=-42.97, y=-59.50, z=28.50]: old=20.0(class java.lang.Float), new=1 minecraft:item_frame(class net.minecraft.world.item.ItemStack)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+attacking an item frame disguised as a player:
+
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 9 on entity RemotePlayer['Dinnerbone'/20440, l='ClientLevel', x=-42.97, y=-59.50, z=28.50]: old=20.0(class java.lang.Float), new=0 minecraft:air(class net.minecraft.world.item.ItemStack)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+
+Kicked when attacking an item entity that's disguised as an attackable entity
+
+
+
+
+When disguising a firework rocket as a player
+
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 8 on entity RemotePlayer['Dinnerbone'/22316, l='ClientLevel', x=-51.50, y=-58.50, z=39.50]: old=0(class java.lang.Byte), new=1 minecraft:firework_rocket(class net.minecraft.world.item.ItemStack)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+
+Disguising a trident as a player can have issues, and attacking it kicks the player who attacked
+
+
+I can't set the item with something like setItem if I disguise as an item
+
+
+Disguising a tnt as another entity:
+
+
+Description: Packet handling error
+
+java.lang.IllegalStateException: Invalid entity data item type for field 8 on entity Turtle['Turtle'/23850, l='ClientLevel', x=-8.49, y=-59.00, z=55.51]: old=0(class java.lang.Byte), new=63(class java.lang.Integer)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)
+
+
+
+Disguising a trident as a player:
+
+
+java.lang.IllegalStateException: Invalid entity data item type for field 10 on entity RemotePlayer['Notch'/24890, l='ClientLevel', x=-16.29, y=-58.43, z=30.33]: old=[](class java.util.ImmutableCollections$ListN), new=true(class java.lang.Boolean)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValue(SynchedEntityData.java:124)
+	at knot//net.minecraft.network.syncher.SynchedEntityData.assignValues(SynchedEntityData.java:115)
+	at knot//net.minecraft.client.multiplayer.ClientPacketListener.handleSetEntityData(ClientPacketListener.java:665)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:54)
+	at knot//net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket.handle(ClientboundSetEntityDataPacket.java:12)
+	at knot//net.minecraft.network.PacketProcessor$ListenerAndPacket.handle(PacketProcessor.java:55)
+	at knot//net.minecraft.network.PacketProcessor.processQueuedPackets(PacketProcessor.java:38)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1337)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at net.fabricmc.devlaunchinjector.Main.main(Main.java:86)

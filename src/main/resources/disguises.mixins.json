@@ -10,7 +10,8 @@
     "LivingEntitySwingMixin",
     "MobSoundMixin",
     "ChunkMapAccessor",
-    "TrackedEntityAccessor"
+    "TrackedEntityAccessor",
+    "GameModeChangeMixin"
   ],
   "client": [],
   "injectors": {

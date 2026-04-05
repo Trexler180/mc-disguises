@@ -1,13 +1,16 @@
 package com.coffee.disguises;
 
 import com.coffee.disguises.command.DisguiseCommand;
+import com.coffee.disguises.command.DisguiseHelpCommand;
 import com.coffee.disguises.command.DisguisesAdminCommand;
+import com.coffee.disguises.command.SavedDisguiseCommand;
 import com.coffee.disguises.command.UndisguiseCommand;
 import com.coffee.disguises.compat.VanishCompat;
 import com.coffee.disguises.core.DisguiseManager;
 import com.coffee.disguises.packet.PacketInterceptor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -34,6 +37,8 @@ public class DisguisesMod implements ModInitializer {
             DisguiseCommand.register(dispatcher);
             UndisguiseCommand.register(dispatcher);
             DisguisesAdminCommand.register(dispatcher);
+            DisguiseHelpCommand.register(dispatcher);
+            SavedDisguiseCommand.register(dispatcher);
         });
 
         // ─── Per-tick work ────────────────────────────────────────────────────
@@ -63,6 +68,30 @@ public class DisguisesMod implements ModInitializer {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
                 if (player != null) {
                     DisguiseManager.INSTANCE.sendDisguiseActionBar(player);
+                }
+            }
+        });
+
+        // ─── Auto-undisguise: death / world change ────────────────────────────
+        // AFTER_RESPAWN fires for both death respawns and dimension transfers.
+        //   alive=false → the player died (death respawn)
+        //   alive=true  → the player changed dimension (teleport/portal)
+        //
+        // When the disguise is KEPT, the old ServerPlayer object is gone and the
+        // self-view puppet (if any) was bound to its now-dead connection.  We must
+        // transfer the puppet state to the new player object so the self-view works
+        // again after the respawn / dimension change.
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+            if (!alive && CONFIG.undisguiseOnDeath) {
+                DisguiseManager.INSTANCE.removeDisguise(oldPlayer, true);
+            } else if (alive && CONFIG.undisguiseOnWorldChange) {
+                DisguiseManager.INSTANCE.removeDisguise(oldPlayer, true);
+            } else {
+                // Disguise is kept — re-anchor the self-view puppet to the new player object.
+                com.coffee.disguises.disguise.Disguise kept =
+                        DisguiseManager.INSTANCE.getDisguise(newPlayer);
+                if (kept != null && kept.isSelfDisguise()) {
+                    PacketInterceptor.transferSelfView(oldPlayer, newPlayer, kept);
                 }
             }
         });

@@ -53,7 +53,7 @@ public enum DisguiseType {
             () -> SoundEvents.ARMADILLO_HURT,
             () -> SoundEvents.ARMADILLO_DEATH),
 
-    AXOLOTL("axolotl", EntityType.AXOLOTL, AgeableWatcher.class, false,
+    AXOLOTL("axolotl", EntityType.AXOLOTL, AxolotlWatcher.class, false,
             () -> SoundEvents.AXOLOTL_IDLE_WATER,
             () -> SoundEvents.AXOLOTL_HURT,
             () -> SoundEvents.AXOLOTL_DEATH),
@@ -63,7 +63,7 @@ public enum DisguiseType {
             () -> SoundEvents.BAT_HURT,
             () -> SoundEvents.BAT_DEATH),
 
-    BEE("bee", EntityType.BEE, AgeableWatcher.class, false,
+    BEE("bee", EntityType.BEE, BeeWatcher.class, false,
             () -> SoundEvents.BEE_LOOP,
             () -> SoundEvents.BEE_HURT,
             () -> SoundEvents.BEE_DEATH),
@@ -79,7 +79,7 @@ public enum DisguiseType {
             () -> SoundEvents.CAMEL_HURT,
             () -> SoundEvents.CAMEL_DEATH),
 
-    CAT("cat", EntityType.CAT, AgeableWatcher.class, false,
+    CAT("cat", EntityType.CAT, CatWatcher.class, false,
             () -> SoundEvents.CAT_AMBIENT,
             () -> SoundEvents.CAT_HURT,
             () -> SoundEvents.CAT_DEATH),
@@ -118,12 +118,12 @@ public enum DisguiseType {
             () -> SoundEvents.ENDER_DRAGON_HURT,
             () -> SoundEvents.ENDER_DRAGON_DEATH),
 
-    FOX("fox", EntityType.FOX, AgeableWatcher.class, false,
+    FOX("fox", EntityType.FOX, FoxWatcher.class, false,
             () -> SoundEvents.FOX_AMBIENT,
             () -> SoundEvents.FOX_HURT,
             () -> SoundEvents.FOX_DEATH),
 
-    FROG("frog", EntityType.FROG, AgeableWatcher.class, false,
+    FROG("frog", EntityType.FROG, FrogWatcher.class, false,
             () -> SoundEvents.FROG_AMBIENT,
             () -> SoundEvents.FROG_HURT,
             () -> SoundEvents.FROG_DEATH),
@@ -133,7 +133,7 @@ public enum DisguiseType {
             () -> SoundEvents.GLOW_SQUID_HURT,
             () -> SoundEvents.GLOW_SQUID_DEATH),
 
-    GOAT("goat", EntityType.GOAT, AgeableWatcher.class, false,
+    GOAT("goat", EntityType.GOAT, GoatWatcher.class, false,
             () -> SoundEvents.GOAT_AMBIENT,
             () -> SoundEvents.GOAT_HURT,
             () -> SoundEvents.GOAT_DEATH),
@@ -142,7 +142,7 @@ public enum DisguiseType {
     HAPPY_GHAST("happy_ghast", EntityType.HAPPY_GHAST, LivingEntityWatcher.class, false,
             null, null, null),
 
-    HORSE("horse", EntityType.HORSE, AgeableWatcher.class, false,
+    HORSE("horse", EntityType.HORSE, HorseWatcher.class, false,
             () -> SoundEvents.HORSE_AMBIENT,
             () -> SoundEvents.HORSE_HURT,
             () -> SoundEvents.HORSE_DEATH),
@@ -152,12 +152,12 @@ public enum DisguiseType {
             () -> SoundEvents.IRON_GOLEM_HURT,
             () -> SoundEvents.IRON_GOLEM_DEATH),
 
-    LLAMA("llama", EntityType.LLAMA, AgeableWatcher.class, false,
+    LLAMA("llama", EntityType.LLAMA, LlamaWatcher.class, false,
             () -> SoundEvents.LLAMA_AMBIENT,
             () -> SoundEvents.LLAMA_HURT,
             () -> SoundEvents.LLAMA_DEATH),
 
-    MOOSHROOM("mooshroom", EntityType.MOOSHROOM, AgeableWatcher.class, false,
+    MOOSHROOM("mooshroom", EntityType.MOOSHROOM, MooshroomWatcher.class, false,
             () -> SoundEvents.COW_AMBIENT,
             () -> SoundEvents.COW_HURT,
             () -> SoundEvents.COW_DEATH),
@@ -178,12 +178,12 @@ public enum DisguiseType {
             () -> SoundEvents.OCELOT_HURT,
             () -> SoundEvents.OCELOT_DEATH),
 
-    PANDA("panda", EntityType.PANDA, AgeableWatcher.class, false,
+    PANDA("panda", EntityType.PANDA, PandaWatcher.class, false,
             () -> SoundEvents.PANDA_AMBIENT,
             () -> SoundEvents.PANDA_HURT,
             () -> SoundEvents.PANDA_DEATH),
 
-    PARROT("parrot", EntityType.PARROT, AgeableWatcher.class, false,
+    PARROT("parrot", EntityType.PARROT, ParrotWatcher.class, false,
             () -> SoundEvents.PARROT_AMBIENT,
             () -> SoundEvents.PARROT_HURT,
             () -> SoundEvents.PARROT_DEATH),
@@ -203,7 +203,7 @@ public enum DisguiseType {
             () -> SoundEvents.PUFFER_FISH_HURT,
             () -> SoundEvents.PUFFER_FISH_DEATH),
 
-    RABBIT("rabbit", EntityType.RABBIT, AgeableWatcher.class, false,
+    RABBIT("rabbit", EntityType.RABBIT, RabbitWatcher.class, false,
             () -> SoundEvents.RABBIT_AMBIENT,
             () -> SoundEvents.RABBIT_HURT,
             () -> SoundEvents.RABBIT_DEATH),
@@ -238,7 +238,7 @@ public enum DisguiseType {
             () -> SoundEvents.SQUID_HURT,
             () -> SoundEvents.SQUID_DEATH),
 
-    STRIDER("strider", EntityType.STRIDER, AgeableWatcher.class, false,
+    STRIDER("strider", EntityType.STRIDER, StriderWatcher.class, false,
             () -> SoundEvents.STRIDER_AMBIENT,
             () -> SoundEvents.STRIDER_HURT,
             () -> SoundEvents.STRIDER_DEATH),
@@ -248,12 +248,12 @@ public enum DisguiseType {
             () -> SoundEvents.TADPOLE_HURT,
             () -> SoundEvents.TADPOLE_DEATH),
 
-    TRADER_LLAMA("trader_llama", EntityType.TRADER_LLAMA, AgeableWatcher.class, false,
+    TRADER_LLAMA("trader_llama", EntityType.TRADER_LLAMA, LlamaWatcher.class, false,
             () -> SoundEvents.LLAMA_AMBIENT,
             () -> SoundEvents.LLAMA_HURT,
             () -> SoundEvents.LLAMA_DEATH),
 
-    TROPICAL_FISH("tropical_fish", EntityType.TROPICAL_FISH, LivingEntityWatcher.class, false,
+    TROPICAL_FISH("tropical_fish", EntityType.TROPICAL_FISH, TropicalFishWatcher.class, false,
             null,
             () -> SoundEvents.TROPICAL_FISH_HURT,
             () -> SoundEvents.TROPICAL_FISH_DEATH),
@@ -263,7 +263,7 @@ public enum DisguiseType {
             () -> SoundEvents.TURTLE_HURT,
             () -> SoundEvents.TURTLE_DEATH),
 
-    VILLAGER("villager", EntityType.VILLAGER, LivingEntityWatcher.class, false,
+    VILLAGER("villager", EntityType.VILLAGER, VillagerWatcher.class, false,
             () -> SoundEvents.VILLAGER_AMBIENT,
             () -> SoundEvents.VILLAGER_HURT,
             () -> SoundEvents.VILLAGER_DEATH),
@@ -376,12 +376,12 @@ public enum DisguiseType {
             () -> SoundEvents.STRAY_HURT,
             () -> SoundEvents.STRAY_DEATH),
 
-    PHANTOM("phantom", EntityType.PHANTOM, LivingEntityWatcher.class, false,
+    PHANTOM("phantom", EntityType.PHANTOM, PhantomWatcher.class, false,
             () -> SoundEvents.PHANTOM_AMBIENT,
             () -> SoundEvents.PHANTOM_HURT,
             () -> SoundEvents.PHANTOM_DEATH),
 
-    PIGLIN("piglin", EntityType.PIGLIN, AgeableWatcher.class, false,
+    PIGLIN("piglin", EntityType.PIGLIN, PiglinWatcher.class, false,
             () -> SoundEvents.PIGLIN_AMBIENT,
             () -> SoundEvents.PIGLIN_HURT,
             () -> SoundEvents.PIGLIN_DEATH),
@@ -401,7 +401,7 @@ public enum DisguiseType {
             () -> SoundEvents.RAVAGER_HURT,
             () -> SoundEvents.RAVAGER_DEATH),
 
-    SHULKER("shulker", EntityType.SHULKER, LivingEntityWatcher.class, false,
+    SHULKER("shulker", EntityType.SHULKER, ShulkerWatcher.class, false,
             () -> SoundEvents.SHULKER_AMBIENT,
             () -> SoundEvents.SHULKER_HURT,
             () -> SoundEvents.SHULKER_DEATH),
@@ -477,7 +477,7 @@ public enum DisguiseType {
             () -> SoundEvents.DROWNED_HURT,
             () -> SoundEvents.DROWNED_DEATH),
 
-    ZOMBIE_VILLAGER("zombie_villager", EntityType.ZOMBIE_VILLAGER, LivingEntityWatcher.class, false,
+    ZOMBIE_VILLAGER("zombie_villager", EntityType.ZOMBIE_VILLAGER, ZombieVillagerWatcher.class, false,
             () -> SoundEvents.ZOMBIE_VILLAGER_AMBIENT,
             () -> SoundEvents.ZOMBIE_VILLAGER_HURT,
             () -> SoundEvents.ZOMBIE_VILLAGER_DEATH),
@@ -498,7 +498,7 @@ public enum DisguiseType {
     // INANIMATE — Armor Stand (LivingEntity; can show equipment)
     // =========================================================================
 
-    ARMOR_STAND("armor_stand", EntityType.ARMOR_STAND, LivingEntityWatcher.class, false,
+    ARMOR_STAND("armor_stand", EntityType.ARMOR_STAND, ArmorStandWatcher.class, false,
             null, null, null),
 
     // =========================================================================
@@ -525,16 +525,25 @@ public enum DisguiseType {
     //
     // EXCLUDED — these types cannot be spoofed safely via ClientboundAddEntityPacket:
     //
-    //   EXPERIENCE_ORB — uses ClientboundAddExperienceOrbPacket; sending
-    //                    add_entity for this type is silently dropped or crashes.
     //   PAINTING       — Painting.recreateFromPacket calls HangingEntity.setDirection
     //                    which validates that a real block face exists at the entity's
     //                    position to hang on. A player in open air always fails this
     //                    check → Validate.isTrue crash on every observer. There is no
     //                    way to send a painting packet for an arbitrary world position.
     //                    Use ITEM_FRAME or GLOW_ITEM_FRAME for a similar flat look.
+    //
+    // EXPERIENCE_ORB was previously excluded because older MC versions sent it via a
+    // separate ClientboundAddExperienceOrbPacket. As of 1.20.2, experience orbs use
+    // the standard ClientboundAddEntityPacket like all other entity types.
+    // PacketInterceptor.getAddEntityData() returns the exp value for the data field.
 
     END_CRYSTAL("end_crystal", EntityType.END_CRYSTAL, FlagWatcher.class, true, null, null, null),
+
+    /**
+     * Experience orb. The AddEntityPacket {@code data} field encodes the experience
+     * amount shown visually. PacketInterceptor returns 1 by default (the smallest orb).
+     */
+    EXPERIENCE_ORB("experience_orb", EntityType.EXPERIENCE_ORB, FlagWatcher.class, true, null, null, null),
 
     /**
      * PacketInterceptor reads FallingBlockWatcher.getBlockId() for the AddEntityPacket data field.
@@ -550,7 +559,7 @@ public enum DisguiseType {
     BLOCK_DISPLAY("block_display", EntityType.BLOCK_DISPLAY, BlockDisplayWatcher.class, true, null, null, null),
 
     GLOW_ITEM_FRAME("glow_item_frame", EntityType.GLOW_ITEM_FRAME, FlagWatcher.class, true, null, null, null),
-    ITEM("item", EntityType.ITEM, FlagWatcher.class, true, null, null, null),
+    ITEM("item", EntityType.ITEM, ItemWatcher.class, true, null, null, null),
     ITEM_FRAME("item_frame", EntityType.ITEM_FRAME, FlagWatcher.class, true, null, null, null),
     LEASH_KNOT("leash_knot", EntityType.LEASH_KNOT, FlagWatcher.class, true, null, null, null),
     TNT("tnt", EntityType.TNT, FlagWatcher.class, true, null, null, null),

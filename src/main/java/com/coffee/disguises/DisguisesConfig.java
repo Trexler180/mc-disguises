@@ -52,6 +52,13 @@ public class DisguisesConfig {
     /** Save and restore disguises across server restarts */
     public boolean persistDisguises = false;
 
+    // ---- Auto-undisguise ----
+    /** Automatically remove a player's disguise when they die */
+    public boolean undisguiseOnDeath = false;
+
+    /** Automatically remove a player's disguise when they change dimension */
+    public boolean undisguiseOnWorldChange = false;
+
     // ---- Restrictions ----
     /** Entity types that cannot be used as disguises (e.g. "wither", "ender_dragon") */
     public List<String> disabledEntityTypes = new ArrayList<>();

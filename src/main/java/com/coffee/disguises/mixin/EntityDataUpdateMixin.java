@@ -162,24 +162,33 @@ public abstract class EntityDataUpdateMixin {
 
         // ── ClientboundAnimatePacket ──────────────────────────────────────────
         // Client unconditionally casts to LivingEntity; drop for inanimate disguises.
-        // For certain disguise types whose animation is NOT driven by LivingEntity.swingTime
-        // but by a type-specific DataTracker field, we also emit that field here.
+        // Additionally, action=2 (WAKE_UP_PLAYER) unconditionally casts to
+        // AbstractClientPlayer — drop it for all non-player disguises to prevent
+        // ClassCastException when a sleeping/waking disguised player is observed.
         if (packet instanceof ClientboundAnimatePacket animPacket) {
             Entity entity = serverLevel.getEntity(animPacket.getId());
             if (entity == null) return;
             Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
             if (disguise == null || observer == entity) return;
+
+            // Inanimate disguise: client tries to cast collector/entity to LivingEntity → crash.
             if (disguise.getType().isInanimate()) {
                 ci.cancel();
                 return;
             }
 
-            // ── Iron Golem: attack animation driven by AnimationState via entity event ──
-            // In MC 1.21.x IronGolem has no DATA_ATTACK_ANIMATION_TICK_ID DataTracker field.
-            // IronGolemModel uses an AnimationState (client-side) started by
-            // IronGolem.handleEntityEvent((byte) 4). The real entity sends this event
-            // via broadcastEntityEvent, but a disguised player only sends a swing packet.
-            // We translate the swing into the entity event that the golem model expects.
+            // WAKE_UP_PLAYER (action=2): client unconditionally casts to AbstractClientPlayer.
+            // Safe only when the disguise is also a PLAYER; drop for all other living disguises.
+            int animAction = com.coffee.disguises.packet.PacketInterceptor.getAnimateAction(animPacket);
+            if (animAction == 2
+                    && disguise.getType() != com.coffee.disguises.disguise.DisguiseType.PLAYER) {
+                ci.cancel();
+                return;
+            }
+
+            // ── Iron Golem / Warden: translate swing into entity event 4 ──────────
+            // IronGolemModel / WardenModel use an AnimationState started by entity event 4.
+            // A disguised player's swing only sends an animate packet; translate it.
             if (disguise.getType() == com.coffee.disguises.disguise.DisguiseType.IRON_GOLEM
                     || disguise.getType() == com.coffee.disguises.disguise.DisguiseType.WARDEN) {
                 observer.connection.send(
@@ -278,7 +287,20 @@ public abstract class EntityDataUpdateMixin {
         if (!(packet instanceof ClientboundSetEntityDataPacket dataPacket)) return;
 
         Entity entity = serverLevel.getEntity(dataPacket.id());
-        if (entity == null) return;
+        if (entity == null) {
+            // Cross-dimension edge case: entity is in a different ServerLevel.
+            // Try all loaded levels before giving up — passing the packet through
+            // unfiltered would be a crash waiting to happen.
+            net.minecraft.server.MinecraftServer ms = serverLevel.getServer();
+            if (ms != null) {
+                for (net.minecraft.server.level.ServerLevel lvl : ms.getAllLevels()) {
+                    if (lvl == serverLevel) continue;
+                    entity = lvl.getEntity(dataPacket.id());
+                    if (entity != null) break;
+                }
+            }
+            if (entity == null) return;
+        }
 
         Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
         if (disguise == null) return;
