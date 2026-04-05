@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Minecraft Client",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "gradlew.bat", "runClient"],
+      "port": 25565
+    },
+    {
+      "name": "Minecraft Server",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "gradlew.bat", "runServer", "--args=nogui"],
+      "port": 25565
+    }
+  ]
+}

@@ -9,11 +9,45 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.animal.bee.Bee;
+import net.minecraft.world.entity.animal.fish.TropicalFish;
+import net.minecraft.world.entity.animal.fox.Fox;
+import net.minecraft.world.entity.animal.panda.Panda;
+import net.minecraft.world.entity.animal.parrot.Parrot;
+import net.minecraft.world.entity.animal.rabbit.Rabbit;
+import net.minecraft.world.entity.animal.axolotl.Axolotl;
+import net.minecraft.world.entity.animal.goat.Goat;
 import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.animal.wolf.Wolf;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Rotations;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.animal.feline.Cat;
+import net.minecraft.world.entity.animal.frog.Frog;
+import net.minecraft.world.entity.animal.cow.MushroomCow;
+import net.minecraft.world.entity.animal.equine.AbstractChestedHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.Horse;
+import net.minecraft.world.entity.animal.equine.Llama;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.Strider;
+import net.minecraft.world.entity.monster.zombie.ZombieVillager;
+import net.minecraft.world.entity.monster.piglin.Piglin;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerData;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.VillagerType;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -122,6 +156,97 @@ public class MetadataBuilder {
     // Sending (1,1,1) is required; the default is (0,0,0) which makes the entity invisible.
     private static Field F_DISPLAY_SCALE;
 
+    // Phantom
+    private static Field F_PHANTOM_SIZE;
+
+    // Goat
+    private static Field F_GOAT_SCREAMING;
+    private static Field F_GOAT_LEFT_HORN;
+    private static Field F_GOAT_RIGHT_HORN;
+
+    // Bee
+    private static Field F_BEE_ANGER_TIME;
+    private static Field F_BEE_FLAGS;
+
+    // Strider
+    private static Field F_STRIDER_SHAKING;
+    private static Field F_STRIDER_SADDLE;
+
+    // Piglin
+    private static Field F_PIGLIN_BABY;
+    private static Field F_PIGLIN_CHARGING;
+    private static Field F_PIGLIN_DANCING;
+    private static Field F_PIGLIN_CELEBRATING;
+
+    // ArmorStand
+    private static Field F_ARMOR_STAND_FLAGS;
+
+    // Parrot
+    private static Field F_PARROT_VARIANT;
+
+    // TropicalFish
+    private static Field F_TROPICAL_FISH_VARIANT;
+
+    // Rabbit
+    private static Field F_RABBIT_TYPE;
+
+    // Fox
+    private static Field F_FOX_TYPE;
+    private static Field F_FOX_FLAGS;
+
+    // Panda
+    private static Field F_PANDA_MAIN_GENE;
+    private static Field F_PANDA_HIDDEN_GENE;
+
+    // Axolotl
+    private static Field F_AXOLOTL_VARIANT;
+    private static Field F_AXOLOTL_PLAYING_DEAD;
+
+    // Horse
+    private static Field F_ABSTRACT_HORSE_FLAGS;
+    private static Field F_HORSE_VARIANT;
+
+    // Llama / AbstractChestedHorse
+    private static Field F_ABSTRACT_CHESTED_HORSE_CHEST;
+    private static Field F_LLAMA_STRENGTH;
+    private static Field F_LLAMA_CARPET_COLOR;
+    private static Field F_LLAMA_VARIANT;
+
+    // Cat
+    private static Field F_CAT_VARIANT;
+    private static Field F_CAT_LYING;
+    private static Field F_CAT_RELAXED;
+    private static Field F_CAT_COLLAR_COLOR;
+
+    // Frog
+    private static Field F_FROG_VARIANT;
+
+    // MushroomCow (Mooshroom)
+    private static Field F_MOOSHROOM_VARIANT;
+
+    // Villager
+    private static Field F_VILLAGER_DATA;
+
+    // ZombieVillager
+    private static Field F_ZOMBIE_VILLAGER_CONVERTING;
+    private static Field F_ZOMBIE_VILLAGER_DATA;
+
+    // Shulker
+    private static Field F_SHULKER_ATTACH_FACE;
+    private static Field F_SHULKER_PEEK;
+    private static Field F_SHULKER_COLOR;
+
+    // ItemEntity
+    private static Field F_ITEM_ENTITY_ITEM;
+
+    // ArmorStand poses
+    private static Field F_ARMOR_STAND_HEAD_POSE;
+    private static Field F_ARMOR_STAND_BODY_POSE;
+    private static Field F_ARMOR_STAND_LEFT_ARM_POSE;
+    private static Field F_ARMOR_STAND_RIGHT_ARM_POSE;
+    private static Field F_ARMOR_STAND_LEFT_LEG_POSE;
+    private static Field F_ARMOR_STAND_RIGHT_LEG_POSE;
+
     // ── Expected DataTracker indices ──────────────────────────────────────────
     // Used as fallback when name-based lookup fails.
 
@@ -169,6 +294,75 @@ public class MetadataBuilder {
     // Display.DATA_SCALE_ID — index 12 in 1.21.x Mojang mappings
     private static final int IDX_DISPLAY_SCALE = 12;
 
+    private static final int IDX_PHANTOM_SIZE            = 16;
+
+    private static final int IDX_GOAT_SCREAMING          = 17;
+    private static final int IDX_GOAT_LEFT_HORN          = 18;
+    private static final int IDX_GOAT_RIGHT_HORN         = 19;
+
+    private static final int IDX_BEE_ANGER_TIME          = 17;
+    private static final int IDX_BEE_FLAGS               = 18;
+
+    private static final int IDX_STRIDER_SHAKING         = 18;
+    private static final int IDX_STRIDER_SADDLE          = 19;
+
+    private static final int IDX_PIGLIN_BABY             = 16;
+    private static final int IDX_PIGLIN_CHARGING         = 17;
+    private static final int IDX_PIGLIN_DANCING          = 18;
+    private static final int IDX_PIGLIN_CELEBRATING      = 19;
+
+    private static final int IDX_ARMOR_STAND_FLAGS       = 15;
+
+    private static final int IDX_PARROT_VARIANT          = 19;
+
+    private static final int IDX_TROPICAL_FISH_VARIANT   = 16;
+
+    private static final int IDX_RABBIT_TYPE             = 17;
+
+    private static final int IDX_FOX_TYPE                = 17;
+    private static final int IDX_FOX_FLAGS               = 18;
+
+    private static final int IDX_PANDA_MAIN_GENE         = 19;
+    private static final int IDX_PANDA_HIDDEN_GENE       = 20;
+
+    private static final int IDX_AXOLOTL_VARIANT         = 17;
+    private static final int IDX_AXOLOTL_PLAYING_DEAD    = 18;
+
+    private static final int IDX_ABSTRACT_HORSE_FLAGS    = 17;
+    private static final int IDX_HORSE_VARIANT           = 18;
+
+    private static final int IDX_ABSTRACT_CHESTED_CHEST  = 18;
+    private static final int IDX_LLAMA_STRENGTH          = 19;
+    private static final int IDX_LLAMA_CARPET_COLOR      = 20;
+    private static final int IDX_LLAMA_VARIANT           = 21;
+
+    private static final int IDX_CAT_VARIANT             = 19;
+    private static final int IDX_CAT_LYING               = 20;
+    private static final int IDX_CAT_RELAXED             = 21;
+    private static final int IDX_CAT_COLLAR_COLOR        = 22;
+
+    private static final int IDX_FROG_VARIANT            = 17;
+
+    private static final int IDX_MOOSHROOM_VARIANT       = 17;
+
+    private static final int IDX_VILLAGER_DATA           = 17;
+
+    private static final int IDX_ZOMBIE_VILLAGER_CONVERTING = 19;
+    private static final int IDX_ZOMBIE_VILLAGER_DATA    = 20;
+
+    private static final int IDX_SHULKER_ATTACH_FACE     = 16;
+    private static final int IDX_SHULKER_PEEK            = 17;
+    private static final int IDX_SHULKER_COLOR           = 18;
+
+    private static final int IDX_ITEM_ENTITY_ITEM        = 8;
+
+    private static final int IDX_ARMOR_STAND_HEAD_POSE      = 16;
+    private static final int IDX_ARMOR_STAND_BODY_POSE      = 17;
+    private static final int IDX_ARMOR_STAND_LEFT_ARM_POSE  = 18;
+    private static final int IDX_ARMOR_STAND_RIGHT_ARM_POSE = 19;
+    private static final int IDX_ARMOR_STAND_LEFT_LEG_POSE  = 20;
+    private static final int IDX_ARMOR_STAND_RIGHT_LEG_POSE = 21;
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private static volatile boolean initialized = false;
@@ -211,6 +405,132 @@ public class MetadataBuilder {
         F_WOLF_ANGER_TIME   = resolve(Wolf.class,          IDX_WOLF_ANGER_TIME,   "DATA_ANGER_END_TIME", "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
 
         F_ENDERMAN_CREEPY = resolve(EnderMan.class, IDX_ENDERMAN_CREEPY, "DATA_CREEPY", "DATA_CREEPY_STARE", "DATA_IS_SCREAMING");
+
+        F_PHANTOM_SIZE = resolve(Phantom.class, IDX_PHANTOM_SIZE,
+                "DATA_SIZE", "DATA_ID_SIZE", "DATA_PHANTOM_SIZE");
+
+        F_GOAT_SCREAMING  = resolve(Goat.class, IDX_GOAT_SCREAMING,
+                "DATA_IS_SCREAMING", "DATA_GOAT_SCREAMING");
+        F_GOAT_LEFT_HORN  = resolve(Goat.class, IDX_GOAT_LEFT_HORN,
+                "DATA_HAS_LEFT_HORN", "DATA_LEFT_HORN");
+        F_GOAT_RIGHT_HORN = resolve(Goat.class, IDX_GOAT_RIGHT_HORN,
+                "DATA_HAS_RIGHT_HORN", "DATA_RIGHT_HORN");
+
+        F_BEE_ANGER_TIME = resolve(Bee.class, IDX_BEE_ANGER_TIME,
+                "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
+        F_BEE_FLAGS      = resolve(Bee.class, IDX_BEE_FLAGS,
+                "DATA_FLAGS_ID", "DATA_FLAGS", "DATA_BEE_FLAGS");
+
+        F_STRIDER_SHAKING = resolve(Strider.class, IDX_STRIDER_SHAKING,
+                "DATA_SHAKING", "DATA_SHAKING_ID", "DATA_SUFFOCATING");
+        F_STRIDER_SADDLE  = resolve(Strider.class, IDX_STRIDER_SADDLE,
+                "DATA_HAS_SADDLE", "DATA_SADDLED", "DATA_SADDLE");
+
+        F_PIGLIN_BABY        = resolve(Piglin.class, IDX_PIGLIN_BABY,
+                "DATA_BABY_PIGLIN", "DATA_BABY");
+        F_PIGLIN_CHARGING    = resolve(Piglin.class, IDX_PIGLIN_CHARGING,
+                "DATA_IS_CHARGING_CROSSBOW", "DATA_CHARGING_CROSSBOW");
+        F_PIGLIN_DANCING     = resolve(Piglin.class, IDX_PIGLIN_DANCING,
+                "DATA_IS_DANCING", "DATA_DANCING");
+        F_PIGLIN_CELEBRATING = resolve(Piglin.class, IDX_PIGLIN_CELEBRATING,
+                "DATA_IS_CELEBRATING", "DATA_CELEBRATING");
+
+        F_ARMOR_STAND_FLAGS = resolve(ArmorStand.class, IDX_ARMOR_STAND_FLAGS,
+                "DATA_CLIENT_FLAGS", "DATA_FLAGS", "DATA_ARMOR_STAND_FLAGS");
+
+        F_PARROT_VARIANT = resolve(Parrot.class, IDX_PARROT_VARIANT,
+                "DATA_VARIANT_ID", "DATA_VARIANT", "DATA_PARROT_VARIANT");
+
+        F_TROPICAL_FISH_VARIANT = resolve(TropicalFish.class, IDX_TROPICAL_FISH_VARIANT,
+                "DATA_ID_TYPE_VARIANT", "DATA_VARIANT", "DATA_TYPE_VARIANT");
+
+        F_RABBIT_TYPE = resolve(Rabbit.class, IDX_RABBIT_TYPE,
+                "DATA_TYPE_ID", "DATA_RABBIT_TYPE", "DATA_TYPE");
+
+        F_FOX_TYPE  = resolve(Fox.class, IDX_FOX_TYPE,
+                "DATA_TYPE_ID", "DATA_FOX_TYPE", "DATA_TYPE");
+        F_FOX_FLAGS = resolve(Fox.class, IDX_FOX_FLAGS,
+                "DATA_FLAGS_ID", "DATA_FOX_FLAGS", "DATA_FLAGS");
+
+        F_PANDA_MAIN_GENE   = resolve(Panda.class, IDX_PANDA_MAIN_GENE,
+                "DATA_MAIN_GENE_ID", "DATA_MAIN_GENE");
+        F_PANDA_HIDDEN_GENE = resolve(Panda.class, IDX_PANDA_HIDDEN_GENE,
+                "DATA_HIDDEN_GENE_ID", "DATA_HIDDEN_GENE");
+
+        F_AXOLOTL_VARIANT      = resolve(Axolotl.class, IDX_AXOLOTL_VARIANT,
+                "DATA_VARIANT", "DATA_VARIANT_ID", "DATA_AXOLOTL_VARIANT");
+        F_AXOLOTL_PLAYING_DEAD = resolve(Axolotl.class, IDX_AXOLOTL_PLAYING_DEAD,
+                "DATA_PLAYING_DEAD", "DATA_PLAY_DEAD", "DATA_PLAYING_DEAD_ID");
+
+        // Horse
+        F_ABSTRACT_HORSE_FLAGS = resolve(AbstractHorse.class, IDX_ABSTRACT_HORSE_FLAGS,
+                "DATA_ID_FLAGS", "DATA_FLAGS_ID", "DATA_HORSE_FLAGS");
+        F_HORSE_VARIANT = resolve(Horse.class, IDX_HORSE_VARIANT,
+                "DATA_ID_TYPE_VARIANT", "DATA_VARIANT", "DATA_HORSE_VARIANT");
+
+        // Llama
+        F_ABSTRACT_CHESTED_HORSE_CHEST = resolve(AbstractChestedHorse.class, IDX_ABSTRACT_CHESTED_CHEST,
+                "DATA_ID_CHEST", "DATA_CHEST_ID", "DATA_HAS_CHEST");
+        F_LLAMA_STRENGTH    = resolve(Llama.class, IDX_LLAMA_STRENGTH,
+                "DATA_STRENGTH_ID", "DATA_STRENGTH", "DATA_LLAMA_STRENGTH");
+        F_LLAMA_CARPET_COLOR = resolve(Llama.class, IDX_LLAMA_CARPET_COLOR,
+                "DATA_CARPET_COLOR", "DATA_CARPET_COLOR_ID", "DATA_DECOR_COLOR_ID");
+        F_LLAMA_VARIANT     = resolve(Llama.class, IDX_LLAMA_VARIANT,
+                "DATA_VARIANT_ID", "DATA_VARIANT", "DATA_LLAMA_VARIANT");
+
+        // Cat
+        F_CAT_VARIANT       = resolve(Cat.class, IDX_CAT_VARIANT,
+                "DATA_VARIANT_ID", "DATA_VARIANT", "DATA_CAT_VARIANT");
+        F_CAT_LYING         = resolve(Cat.class, IDX_CAT_LYING,
+                "DATA_IS_LYING", "IS_LYING", "DATA_CAT_LYING");
+        F_CAT_RELAXED       = resolve(Cat.class, IDX_CAT_RELAXED,
+                "DATA_RELAX_STATE_ONE", "RELAX_STATE_ONE", "DATA_CAT_RELAXED");
+        F_CAT_COLLAR_COLOR  = resolve(Cat.class, IDX_CAT_COLLAR_COLOR,
+                "DATA_COLLAR_COLOR", "DATA_COLLAR_COLOR_ID");
+
+        // Frog
+        F_FROG_VARIANT = resolve(Frog.class, IDX_FROG_VARIANT,
+                "DATA_VARIANT_ID", "DATA_VARIANT", "DATA_FROG_VARIANT");
+
+        // Mooshroom
+        F_MOOSHROOM_VARIANT = resolve(MushroomCow.class, IDX_MOOSHROOM_VARIANT,
+                "DATA_TYPE", "DATA_VARIANT", "DATA_MOOSHROOM_TYPE");
+
+        // Villager
+        F_VILLAGER_DATA = resolve(Villager.class, IDX_VILLAGER_DATA,
+                "DATA_VILLAGER_DATA", "DATA_VILLAGER_DATA_ID");
+
+        // ZombieVillager
+        F_ZOMBIE_VILLAGER_CONVERTING = resolve(ZombieVillager.class, IDX_ZOMBIE_VILLAGER_CONVERTING,
+                "DATA_CONVERTING_ID", "DATA_CONVERTING", "DATA_IS_CONVERTING");
+        F_ZOMBIE_VILLAGER_DATA       = resolve(ZombieVillager.class, IDX_ZOMBIE_VILLAGER_DATA,
+                "DATA_VILLAGER_DATA", "DATA_VILLAGER_DATA_ID");
+
+        // Shulker
+        F_SHULKER_ATTACH_FACE = resolve(Shulker.class, IDX_SHULKER_ATTACH_FACE,
+                "DATA_ATTACH_FACE_ID", "DATA_ATTACH_FACE", "DATA_DIRECTION");
+        F_SHULKER_PEEK        = resolve(Shulker.class, IDX_SHULKER_PEEK,
+                "DATA_PEEK_ID", "DATA_PEEK", "DATA_OPEN_AMOUNT");
+        F_SHULKER_COLOR       = resolve(Shulker.class, IDX_SHULKER_COLOR,
+                "DATA_COLOR_ID", "DATA_COLOR", "DATA_SHULKER_COLOR");
+
+        // ItemEntity
+        F_ITEM_ENTITY_ITEM = resolve(ItemEntity.class, IDX_ITEM_ENTITY_ITEM,
+                "DATA_ITEM", "DATA_ITEM_ID", "DATA_ITEM_STACK");
+
+        // ArmorStand poses
+        F_ARMOR_STAND_HEAD_POSE      = resolve(ArmorStand.class, IDX_ARMOR_STAND_HEAD_POSE,
+                "DATA_HEAD_POSE", "DATA_POSE_HEAD", "DATA_HEAD_ROTATION");
+        F_ARMOR_STAND_BODY_POSE      = resolve(ArmorStand.class, IDX_ARMOR_STAND_BODY_POSE,
+                "DATA_BODY_POSE", "DATA_POSE_BODY", "DATA_BODY_ROTATION");
+        F_ARMOR_STAND_LEFT_ARM_POSE  = resolve(ArmorStand.class, IDX_ARMOR_STAND_LEFT_ARM_POSE,
+                "DATA_LEFT_ARM_POSE", "DATA_POSE_LEFT_ARM", "DATA_LEFT_ARM_ROTATION");
+        F_ARMOR_STAND_RIGHT_ARM_POSE = resolve(ArmorStand.class, IDX_ARMOR_STAND_RIGHT_ARM_POSE,
+                "DATA_RIGHT_ARM_POSE", "DATA_POSE_RIGHT_ARM", "DATA_RIGHT_ARM_ROTATION");
+        F_ARMOR_STAND_LEFT_LEG_POSE  = resolve(ArmorStand.class, IDX_ARMOR_STAND_LEFT_LEG_POSE,
+                "DATA_LEFT_LEG_POSE", "DATA_POSE_LEFT_LEG", "DATA_LEFT_LEG_ROTATION");
+        F_ARMOR_STAND_RIGHT_LEG_POSE = resolve(ArmorStand.class, IDX_ARMOR_STAND_RIGHT_LEG_POSE,
+                "DATA_RIGHT_LEG_POSE", "DATA_POSE_RIGHT_LEG", "DATA_RIGHT_LEG_ROTATION");
 
         // Player skin parts — in MC 1.21.11 DATA_PLAYER_MODE_CUSTOMISATION (Byte) moved to the
         // new Avatar intermediate class (Avatar extends LivingEntity, Player extends Avatar).
@@ -306,6 +626,53 @@ public class MetadataBuilder {
         logResolution("Minecart customDisplay", F_MINECART_CUSTOM_DISPLAY);
         logResolution("BlockDisplay blockState",F_BLOCK_DISPLAY_BLOCK_STATE);
         logResolution("Display scale",          F_DISPLAY_SCALE);
+        logResolution("Phantom size",           F_PHANTOM_SIZE);
+        logResolution("Goat screaming",         F_GOAT_SCREAMING);
+        logResolution("Goat leftHorn",          F_GOAT_LEFT_HORN);
+        logResolution("Goat rightHorn",         F_GOAT_RIGHT_HORN);
+        logResolution("Bee angerTime",          F_BEE_ANGER_TIME);
+        logResolution("Bee flags",              F_BEE_FLAGS);
+        logResolution("Strider shaking",        F_STRIDER_SHAKING);
+        logResolution("Strider saddle",         F_STRIDER_SADDLE);
+        logResolution("Piglin baby",            F_PIGLIN_BABY);
+        logResolution("Piglin chargingCrossbow",F_PIGLIN_CHARGING);
+        logResolution("Piglin dancing",         F_PIGLIN_DANCING);
+        logResolution("Piglin celebrating",     F_PIGLIN_CELEBRATING);
+        logResolution("ArmorStand flags",       F_ARMOR_STAND_FLAGS);
+        logResolution("Parrot variant",         F_PARROT_VARIANT);
+        logResolution("TropicalFish variant",   F_TROPICAL_FISH_VARIANT);
+        logResolution("Rabbit type",            F_RABBIT_TYPE);
+        logResolution("Fox type",               F_FOX_TYPE);
+        logResolution("Fox flags",              F_FOX_FLAGS);
+        logResolution("Panda mainGene",         F_PANDA_MAIN_GENE);
+        logResolution("Panda hiddenGene",       F_PANDA_HIDDEN_GENE);
+        logResolution("Axolotl variant",        F_AXOLOTL_VARIANT);
+        logResolution("Axolotl playingDead",    F_AXOLOTL_PLAYING_DEAD);
+        logResolution("AbstractHorse flags",    F_ABSTRACT_HORSE_FLAGS);
+        logResolution("Horse variant",          F_HORSE_VARIANT);
+        logResolution("Llama chest",            F_ABSTRACT_CHESTED_HORSE_CHEST);
+        logResolution("Llama strength",         F_LLAMA_STRENGTH);
+        logResolution("Llama carpetColor",      F_LLAMA_CARPET_COLOR);
+        logResolution("Llama variant",          F_LLAMA_VARIANT);
+        logResolution("Cat variant",            F_CAT_VARIANT);
+        logResolution("Cat lying",              F_CAT_LYING);
+        logResolution("Cat relaxed",            F_CAT_RELAXED);
+        logResolution("Cat collarColor",        F_CAT_COLLAR_COLOR);
+        logResolution("Frog variant",           F_FROG_VARIANT);
+        logResolution("Mooshroom variant",      F_MOOSHROOM_VARIANT);
+        logResolution("Villager data",          F_VILLAGER_DATA);
+        logResolution("ZombieVillager converting", F_ZOMBIE_VILLAGER_CONVERTING);
+        logResolution("ZombieVillager data",    F_ZOMBIE_VILLAGER_DATA);
+        logResolution("Shulker attachFace",     F_SHULKER_ATTACH_FACE);
+        logResolution("Shulker peek",           F_SHULKER_PEEK);
+        logResolution("Shulker color",          F_SHULKER_COLOR);
+        logResolution("ItemEntity item",        F_ITEM_ENTITY_ITEM);
+        logResolution("ArmorStand headPose",    F_ARMOR_STAND_HEAD_POSE);
+        logResolution("ArmorStand bodyPose",    F_ARMOR_STAND_BODY_POSE);
+        logResolution("ArmorStand leftArmPose", F_ARMOR_STAND_LEFT_ARM_POSE);
+        logResolution("ArmorStand rightArmPose",F_ARMOR_STAND_RIGHT_ARM_POSE);
+        logResolution("ArmorStand leftLegPose", F_ARMOR_STAND_LEFT_LEG_POSE);
+        logResolution("ArmorStand rightLegPose",F_ARMOR_STAND_RIGHT_LEG_POSE);
 
         // Resolve minecart fields now, using EntityType.MINECART to get the right class.
         initMinecartFields();
@@ -418,13 +785,14 @@ public class MetadataBuilder {
     }
 
     /**
-     * Entity parameter retained for API compatibility; the entity is no longer
-     * used internally (minecart fields are resolved in init() via EntityType).
+     * Entity parameter used to obtain RegistryAccess for dynamic-registry lookups
+     * (cat/frog/mooshroom variants). May be null; those entries are silently skipped.
      */
     public static List<SynchedEntityData.DataValue<?>> build(
             FlagWatcher watcher,
             com.coffee.disguises.disguise.DisguiseType type,
             net.minecraft.world.entity.Entity entity) {
+        RegistryAccess registryAccess = (entity != null) ? entity.level().registryAccess() : null;
 
         if (!initialized) init();
 
@@ -494,6 +862,161 @@ public class MetadataBuilder {
 
         if (watcher instanceof EndermanWatcher ew) {
             putBool(list, F_ENDERMAN_CREEPY, ew.isScreaming());
+        }
+
+        // ── Phantom ───────────────────────────────────────────────────────────
+
+        if (watcher instanceof PhantomWatcher phw) {
+            putInt(list, F_PHANTOM_SIZE, phw.getSize());
+        }
+
+        // ── Goat ──────────────────────────────────────────────────────────────
+
+        if (watcher instanceof GoatWatcher gw) {
+            putBool(list, F_GOAT_SCREAMING,  gw.isScreaming());
+            putBool(list, F_GOAT_LEFT_HORN,  gw.hasLeftHorn());
+            putBool(list, F_GOAT_RIGHT_HORN, gw.hasRightHorn());
+        }
+
+        // ── Bee ───────────────────────────────────────────────────────────────
+
+        if (watcher instanceof BeeWatcher bw) {
+            putInt(list,  F_BEE_ANGER_TIME, bw.getRemainingAngerTime());
+            putByte(list, F_BEE_FLAGS,      bw.getBeeFlags());
+        }
+
+        // ── Strider ───────────────────────────────────────────────────────────
+
+        if (watcher instanceof StriderWatcher strw) {
+            putBool(list, F_STRIDER_SHAKING, strw.isShaking());
+            putBool(list, F_STRIDER_SADDLE,  strw.isSaddled());
+        }
+
+        // ── Piglin ────────────────────────────────────────────────────────────
+
+        if (watcher instanceof PiglinWatcher piw) {
+            putBool(list, F_PIGLIN_BABY,        piw.isBabyPiglin());
+            putBool(list, F_PIGLIN_CHARGING,    piw.isChargingCrossbow());
+            putBool(list, F_PIGLIN_DANCING,     piw.isDancing());
+            putBool(list, F_PIGLIN_CELEBRATING, piw.isCelebrating());
+        }
+
+        // ── ArmorStand ────────────────────────────────────────────────────────
+
+        if (watcher instanceof ArmorStandWatcher asw) {
+            putByte(list, F_ARMOR_STAND_FLAGS, asw.getArmorStandFlags());
+            putRotations(list, F_ARMOR_STAND_HEAD_POSE,      asw.getHeadPose());
+            putRotations(list, F_ARMOR_STAND_BODY_POSE,      asw.getBodyPose());
+            putRotations(list, F_ARMOR_STAND_LEFT_ARM_POSE,  asw.getLeftArmPose());
+            putRotations(list, F_ARMOR_STAND_RIGHT_ARM_POSE, asw.getRightArmPose());
+            putRotations(list, F_ARMOR_STAND_LEFT_LEG_POSE,  asw.getLeftLegPose());
+            putRotations(list, F_ARMOR_STAND_RIGHT_LEG_POSE, asw.getRightLegPose());
+        }
+
+        // ── Parrot ────────────────────────────────────────────────────────────
+
+        if (watcher instanceof ParrotWatcher parw) {
+            putInt(list, F_PARROT_VARIANT, parw.getVariant());
+        }
+
+        // ── TropicalFish ──────────────────────────────────────────────────────
+
+        if (watcher instanceof TropicalFishWatcher tfw) {
+            putInt(list, F_TROPICAL_FISH_VARIANT, tfw.getPackedData());
+        }
+
+        // ── Rabbit ────────────────────────────────────────────────────────────
+
+        if (watcher instanceof RabbitWatcher rw) {
+            putInt(list, F_RABBIT_TYPE, rw.getType());
+        }
+
+        // ── Fox ───────────────────────────────────────────────────────────────
+
+        if (watcher instanceof FoxWatcher fw) {
+            putInt(list,  F_FOX_TYPE,  fw.getType());
+            putByte(list, F_FOX_FLAGS, fw.getFoxFlags());
+        }
+
+        // ── Panda ─────────────────────────────────────────────────────────────
+
+        if (watcher instanceof PandaWatcher pdw) {
+            // Gene serializer type changed across MC versions: BYTE in some builds, INT in others.
+            // putIntOrByte() inspects the resolved accessor's serializer at runtime.
+            putIntOrByte(list, F_PANDA_MAIN_GENE,   pdw.getMainGene());
+            putIntOrByte(list, F_PANDA_HIDDEN_GENE, pdw.getHiddenGene());
+        }
+
+        // ── Axolotl ───────────────────────────────────────────────────────────
+
+        if (watcher instanceof AxolotlWatcher axw) {
+            putInt(list,  F_AXOLOTL_VARIANT,      axw.getVariant());
+            putBool(list, F_AXOLOTL_PLAYING_DEAD, axw.isPlayingDead());
+        }
+
+        // ── Horse ─────────────────────────────────────────────────────────────
+
+        if (watcher instanceof HorseWatcher horsew) {
+            putByte(list, F_ABSTRACT_HORSE_FLAGS, horsew.getHorseFlags());
+            putInt(list,  F_HORSE_VARIANT,        horsew.getVariant());
+        }
+
+        // ── Llama (and TraderLlama, which extends Llama) ──────────────────────
+
+        if (watcher instanceof LlamaWatcher llamaw) {
+            putBool(list, F_ABSTRACT_CHESTED_HORSE_CHEST, llamaw.hasChest());
+            putInt(list,  F_LLAMA_STRENGTH,               llamaw.getStrength());
+            putInt(list,  F_LLAMA_CARPET_COLOR,           llamaw.getCarpetColor());
+            putInt(list,  F_LLAMA_VARIANT,                llamaw.getVariant());
+        }
+
+        // ── Cat ───────────────────────────────────────────────────────────────
+
+        if (watcher instanceof CatWatcher catw) {
+            putByte(list, F_TAMEABLE_FLAGS,      catw.getTameableFlags());
+            putHolderFromRegistry(list, F_CAT_VARIANT, registryAccess, Registries.CAT_VARIANT, catw.getVariant());
+            putBool(list, F_CAT_LYING,           catw.isLying());
+            putBool(list, F_CAT_RELAXED,         catw.isRelaxed());
+            putInt(list,  F_CAT_COLLAR_COLOR,    catw.getCollarColor().getId());
+        }
+
+        // ── Frog ──────────────────────────────────────────────────────────────
+
+        if (watcher instanceof FrogWatcher frogw) {
+            putHolderFromRegistry(list, F_FROG_VARIANT, registryAccess, Registries.FROG_VARIANT, frogw.getVariant());
+        }
+
+        // ── Mooshroom ─────────────────────────────────────────────────────────
+
+        if (watcher instanceof MooshroomWatcher moow) {
+            putHolderFromRegistry(list, F_MOOSHROOM_VARIANT, registryAccess, Registries.COW_VARIANT, moow.getVariant());
+        }
+
+        // ── Villager ──────────────────────────────────────────────────────────
+
+        if (watcher instanceof VillagerWatcher vw) {
+            putVillagerData(list, F_VILLAGER_DATA, vw.getType(), vw.getProfession(), vw.getLevel());
+        }
+
+        // ── ZombieVillager ────────────────────────────────────────────────────
+
+        if (watcher instanceof ZombieVillagerWatcher zvw) {
+            putBool(list, F_ZOMBIE_VILLAGER_CONVERTING, zvw.isConverting());
+            putVillagerData(list, F_ZOMBIE_VILLAGER_DATA, zvw.getType(), zvw.getProfession(), zvw.getLevel());
+        }
+
+        // ── Shulker ───────────────────────────────────────────────────────────
+
+        if (watcher instanceof ShulkerWatcher shuw) {
+            putDirection(list, F_SHULKER_ATTACH_FACE, shuw.getAttachFace());
+            putByte(list,      F_SHULKER_PEEK,        shuw.getPeek());
+            putByte(list,      F_SHULKER_COLOR,       shuw.getColor());
+        }
+
+        // ── ItemEntity ────────────────────────────────────────────────────────
+
+        if (watcher instanceof ItemWatcher itw) {
+            putItemStack(list, F_ITEM_ENTITY_ITEM, itw.getItem());
         }
 
         // ── Player skin-layer customisation ───────────────────────────────────
@@ -775,6 +1298,35 @@ public class MetadataBuilder {
     private static void putByte(List<SynchedEntityData.DataValue<?>> list, Field f, int value) {
         put(list, f, (byte) value);
     }
+
+    /**
+     * Writes an integer value that may be serialized as either BYTE or INT depending
+     * on the MC version. Inspects the resolved accessor's serializer at runtime and
+     * dispatches accordingly, avoiding ClassCastException in the Netty encoder.
+     *
+     * Used for fields like Panda gene IDs whose serializer type changed across versions:
+     *   - some builds use EntityDataSerializers.BYTE  (values 0-6 fit in a byte)
+     *   - some builds use EntityDataSerializers.INT   (generic int)
+     */
+    @SuppressWarnings("unchecked")
+    private static void putIntOrByte(List<SynchedEntityData.DataValue<?>> list, Field f, int value) {
+        if (f == null) return;
+        try {
+            EntityDataAccessor<?> acc = (EntityDataAccessor<?>) f.get(null);
+            if (acc == null) return;
+            if (acc.serializer() == EntityDataSerializers.BYTE) {
+                EntityDataAccessor<Byte> byteAcc = (EntityDataAccessor<Byte>) acc;
+                list.add(SynchedEntityData.DataValue.create(byteAcc, (byte) value));
+            } else {
+                EntityDataAccessor<Integer> intAcc = (EntityDataAccessor<Integer>) acc;
+                list.add(SynchedEntityData.DataValue.create(intAcc, value));
+            }
+        } catch (Exception e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Failed to create IntOrByte DataValue for '{}': {}",
+                    f.getName(), e.getMessage());
+        }
+    }
     private static void putBool(List<SynchedEntityData.DataValue<?>> list, Field f, boolean value) {
         put(list, f, value);
     }
@@ -811,6 +1363,67 @@ public class MetadataBuilder {
             com.coffee.disguises.DisguisesMod.LOGGER.warn(
                     "[MetadataBuilder] Failed to create Vector3f DataValue for field '{}': {}",
                     f.getName(), e.getMessage());
+        }
+    }
+
+    private static void putRotations(List<SynchedEntityData.DataValue<?>> list, Field f, Rotations rot) {
+        put(list, f, rot);
+    }
+
+    private static void putDirection(List<SynchedEntityData.DataValue<?>> list, Field f, Direction dir) {
+        put(list, f, dir);
+    }
+
+    private static void putItemStack(List<SynchedEntityData.DataValue<?>> list, Field f, ItemStack item) {
+        put(list, f, item);
+    }
+
+    /**
+     * Looks up entry {@code rawId} in the dynamic registry identified by {@code key},
+     * wraps it as a Holder, and emits it.  If {@code registryAccess} is null (e.g. no
+     * entity is available for the call site) the entry is silently skipped.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> void putHolderFromRegistry(List<SynchedEntityData.DataValue<?>> list, Field f,
+                                                   RegistryAccess registryAccess,
+                                                   ResourceKey<net.minecraft.core.Registry<T>> key,
+                                                   int rawId) {
+        if (f == null || registryAccess == null) return;
+        try {
+            net.minecraft.core.Registry<T> registry = registryAccess.lookupOrThrow(key);
+            T value = registry.byId(rawId);
+            if (value == null) value = registry.byId(0);
+            if (value == null) return;
+            Holder<T> holder = registry.wrapAsHolder(value);
+            EntityDataAccessor<Holder<T>> acc = (EntityDataAccessor<Holder<T>>) f.get(null);
+            list.add(SynchedEntityData.DataValue.create(acc, holder));
+        } catch (Exception e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Failed to create Holder DataValue for '{}': {}",
+                    f != null ? f.getName() : "null", e.getMessage());
+        }
+    }
+
+    /**
+     * Constructs a {@link VillagerData} from registry IDs and emits it.
+     */
+    @SuppressWarnings("unchecked")
+    private static void putVillagerData(List<SynchedEntityData.DataValue<?>> list, Field f,
+                                        int typeId, int professionId, int level) {
+        if (f == null) return;
+        try {
+            VillagerType   type = BuiltInRegistries.VILLAGER_TYPE.byId(typeId);
+            if (type == null)   type   = BuiltInRegistries.VILLAGER_TYPE.byId(2);       // plains fallback
+            VillagerProfession prof = BuiltInRegistries.VILLAGER_PROFESSION.byId(professionId);
+            if (prof == null)   prof   = BuiltInRegistries.VILLAGER_PROFESSION.byId(0); // none fallback
+            if (type == null || prof == null) return;
+            Holder<VillagerType>       typeHolder = BuiltInRegistries.VILLAGER_TYPE.wrapAsHolder(type);
+            Holder<VillagerProfession> profHolder = BuiltInRegistries.VILLAGER_PROFESSION.wrapAsHolder(prof);
+            EntityDataAccessor<VillagerData> acc = (EntityDataAccessor<VillagerData>) f.get(null);
+            list.add(SynchedEntityData.DataValue.create(acc, new VillagerData(typeHolder, profHolder, level)));
+        } catch (Exception e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Failed to create VillagerData DataValue: {}", e.getMessage());
         }
     }
 

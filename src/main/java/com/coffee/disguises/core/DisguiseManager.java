@@ -39,6 +39,18 @@ public class DisguiseManager {
     private final ConcurrentHashMap<UUID, Disguise> activeDisguises = new ConcurrentHashMap<>();
 
     /**
+     * Observer-specific disguise overrides.
+     * entityUUID → (observerUUID → Disguise)
+     *
+     * When an entity is disguised, each observer first checks this map for a
+     * per-observer override before falling back to the default disguise.
+     * Setting an override for an observer who is in range triggers an immediate
+     * re-spawn of the entity for that observer only.
+     */
+    private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, Disguise>> observerDisguises =
+            new ConcurrentHashMap<>();
+
+    /**
      * Players whose self-view preference is ON.  This persists across disguise changes
      * and undisguise so that re-disguising automatically re-enables the puppet.
      * Updated by: applyDisguise (carry-over), removeDisguise (save on undisguise),
@@ -76,6 +88,44 @@ public class DisguiseManager {
 
     public Collection<UUID> getAllDisguisedUUIDs() {
         return Collections.unmodifiableSet(activeDisguises.keySet());
+    }
+
+    // =========================================================================
+    // Observer-specific disguise
+    // =========================================================================
+
+    /**
+     * Returns the observer-specific disguise for this entity+observer pair, or null
+     * if no override is set (fall back to the default disguise).
+     */
+    public Disguise getDisguiseForObserver(Entity entity, UUID observerUUID) {
+        ConcurrentHashMap<UUID, Disguise> map = observerDisguises.get(entity.getUUID());
+        return map != null ? map.get(observerUUID) : null;
+    }
+
+    /**
+     * Sets an observer-specific disguise override for one observer.
+     * Call {@link PacketInterceptor#refreshForObserver} afterward to push the change.
+     */
+    public void setObserverDisguise(Entity entity, UUID observerUUID, Disguise disguise) {
+        observerDisguises.computeIfAbsent(entity.getUUID(), k -> new ConcurrentHashMap<>())
+                .put(observerUUID, disguise);
+    }
+
+    /**
+     * Removes the observer-specific override for one observer.
+     * Call {@link PacketInterceptor#refreshForObserver} afterward to restore the default view.
+     */
+    public void removeObserverDisguise(Entity entity, UUID observerUUID) {
+        ConcurrentHashMap<UUID, Disguise> map = observerDisguises.get(entity.getUUID());
+        if (map == null) return;
+        map.remove(observerUUID);
+        if (map.isEmpty()) observerDisguises.remove(entity.getUUID());
+    }
+
+    /** Clears ALL observer-specific overrides for an entity. */
+    public void clearObserverDisguises(Entity entity) {
+        observerDisguises.remove(entity.getUUID());
     }
 
     // =========================================================================
