@@ -45,6 +45,6 @@ issues.txt
 server_run.log
 *.log
 
-# claude / IDE workspace config
+# IDE workspace config
 
 .claude/
