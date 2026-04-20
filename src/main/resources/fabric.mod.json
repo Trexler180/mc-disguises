@@ -17,11 +17,10 @@
     "disguises.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.15.0",
+    "fabricloader": ">=0.19.2",
     "fabric-api": "*",
-    "minecraft": "~1.21.11",
-    "java": ">=21",
-    "fabric-permissions-api-v0": "*"
+    "minecraft": "~26.1.2",
+    "java": ">=25"
   },
   "suggests": {
     "cloth-config2": "*",

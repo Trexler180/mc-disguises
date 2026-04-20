@@ -2,9 +2,9 @@ package com.coffee.disguises.command;
 
 import com.coffee.disguises.DisguisesMod;
 import com.coffee.disguises.core.SavedDisguisesManager;
+import com.coffee.disguises.util.PermissionCompat;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -26,7 +26,7 @@ public class SavedDisguiseCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
                 Commands.literal("savedisguise")
-                        .requires(Permissions.require("disguises.savedisguise",
+                        .requires(PermissionCompat.require("disguises.savedisguise",
                                 DisguisesMod.CONFIG.permLevelSelf))
 
                         // /savedisguise list

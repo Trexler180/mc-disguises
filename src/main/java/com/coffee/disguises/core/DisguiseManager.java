@@ -302,7 +302,7 @@ public class DisguiseManager {
         String selfTag = disguise.isSelfDisguise() ? " §8[self-view]" : "";
         net.minecraft.network.chat.Component msg = net.minecraft.network.chat.Component.literal(
                 "§7Disguised as §e" + capitalize(disguise.getType().getId()) + selfTag);
-        player.displayClientMessage(msg, true);
+        player.sendSystemMessage(msg, true);
     }
 
     private static String capitalize(String s) {

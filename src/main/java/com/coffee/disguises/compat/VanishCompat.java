@@ -1,6 +1,7 @@
 package com.coffee.disguises.compat;
 
 import com.coffee.disguises.DisguisesMod;
+import com.coffee.disguises.util.PermissionCompat;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -90,13 +91,14 @@ public class VanishCompat {
     private static class ScoreboardTagVanishProvider implements VanishProvider {
         @Override
         public boolean isVanished(Entity entity) {
-            return entity.getTags().contains("vanished");
+            return entity.entityTags().contains("vanished");
         }
 
         @Override
         public boolean canSeeVanished(ServerPlayer observer) {
             // Ops can always see vanished entities
-            return me.lucko.fabric.api.permissions.v0.Permissions.check(observer.createCommandSourceStack(), "disguises.vanish.see", 2) || observer.getTags().contains("vanish.see");
+            return PermissionCompat.check(observer.createCommandSourceStack(), "disguises.vanish.see", 2)
+                    || observer.entityTags().contains("vanish.see");
         }
     }
 }
