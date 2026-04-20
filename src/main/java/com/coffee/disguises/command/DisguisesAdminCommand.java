@@ -7,10 +7,10 @@ import com.coffee.disguises.disguise.Disguise;
 import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.packet.PacketInterceptor;
 import com.coffee.disguises.packet.SkinFetcher;
+import com.coffee.disguises.util.PermissionCompat;
 import com.coffee.disguises.watcher.FlagWatcher;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -34,7 +34,7 @@ public class DisguisesAdminCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
                 Commands.literal("disguises")
-                        .requires(Permissions.require("disguises.admin", DisguisesMod.CONFIG.permLevelAdmin))
+                        .requires(PermissionCompat.require("disguises.admin", DisguisesMod.CONFIG.permLevelAdmin))
 
                         // /disguises reload
                         .then(Commands.literal("reload")

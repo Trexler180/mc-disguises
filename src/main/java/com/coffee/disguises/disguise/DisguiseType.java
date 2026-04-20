@@ -7,6 +7,10 @@ import com.coffee.disguises.watcher.BlockDisplayWatcher;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.chicken.ChickenSoundVariants;
+import net.minecraft.world.entity.animal.cow.CowSoundVariants;
+import net.minecraft.world.entity.animal.feline.CatSoundVariants;
+import net.minecraft.world.entity.animal.pig.PigSoundVariants;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -80,14 +84,14 @@ public enum DisguiseType {
             () -> SoundEvents.CAMEL_DEATH),
 
     CAT("cat", EntityType.CAT, CatWatcher.class, false,
-            () -> SoundEvents.CAT_AMBIENT,
-            () -> SoundEvents.CAT_HURT,
-            () -> SoundEvents.CAT_DEATH),
+            DisguiseType::catAmbientSound,
+            DisguiseType::catHurtSound,
+            DisguiseType::catDeathSound),
 
     CHICKEN("chicken", EntityType.CHICKEN, AgeableWatcher.class, false,
-            () -> SoundEvents.CHICKEN_AMBIENT,
-            () -> SoundEvents.CHICKEN_HURT,
-            () -> SoundEvents.CHICKEN_DEATH),
+            DisguiseType::chickenAmbientSound,
+            DisguiseType::chickenHurtSound,
+            DisguiseType::chickenDeathSound),
 
     COD("cod", EntityType.COD, LivingEntityWatcher.class, false,
             null,
@@ -99,9 +103,9 @@ public enum DisguiseType {
             null, null, null),
 
     COW("cow", EntityType.COW, AgeableWatcher.class, false,
-            () -> SoundEvents.COW_AMBIENT,
-            () -> SoundEvents.COW_HURT,
-            () -> SoundEvents.COW_DEATH),
+            DisguiseType::cowAmbientSound,
+            DisguiseType::cowHurtSound,
+            DisguiseType::cowDeathSound),
 
     DOLPHIN("dolphin", EntityType.DOLPHIN, LivingEntityWatcher.class, false,
             () -> SoundEvents.DOLPHIN_AMBIENT,
@@ -158,9 +162,9 @@ public enum DisguiseType {
             () -> SoundEvents.LLAMA_DEATH),
 
     MOOSHROOM("mooshroom", EntityType.MOOSHROOM, MooshroomWatcher.class, false,
-            () -> SoundEvents.COW_AMBIENT,
-            () -> SoundEvents.COW_HURT,
-            () -> SoundEvents.COW_DEATH),
+            DisguiseType::cowAmbientSound,
+            DisguiseType::cowHurtSound,
+            DisguiseType::cowDeathSound),
 
     MULE("mule", EntityType.MULE, AgeableWatcher.class, false,
             () -> SoundEvents.MULE_AMBIENT,
@@ -189,9 +193,9 @@ public enum DisguiseType {
             () -> SoundEvents.PARROT_DEATH),
 
     PIG("pig", EntityType.PIG, AgeableWatcher.class, false,
-            () -> SoundEvents.PIG_AMBIENT,
-            () -> SoundEvents.PIG_HURT,
-            () -> SoundEvents.PIG_DEATH),
+            DisguiseType::pigAmbientSound,
+            DisguiseType::pigHurtSound,
+            DisguiseType::pigDeathSound),
 
     POLAR_BEAR("polar_bear", EntityType.POLAR_BEAR, AgeableWatcher.class, false,
             () -> SoundEvents.POLAR_BEAR_AMBIENT,
@@ -673,5 +677,53 @@ public enum DisguiseType {
         if (id == null) return Optional.empty();
         String lower = id.toLowerCase();
         return Arrays.stream(values()).filter(t -> t.id.equals(lower)).findFirst();
+    }
+
+    private static SoundEvent catAmbientSound() {
+        return SoundEvents.CAT_SOUNDS.get(CatSoundVariants.SoundSet.CLASSIC).adultSounds().ambientSound().value();
+    }
+
+    private static SoundEvent catHurtSound() {
+        return SoundEvents.CAT_SOUNDS.get(CatSoundVariants.SoundSet.CLASSIC).adultSounds().hurtSound().value();
+    }
+
+    private static SoundEvent catDeathSound() {
+        return SoundEvents.CAT_SOUNDS.get(CatSoundVariants.SoundSet.CLASSIC).adultSounds().deathSound().value();
+    }
+
+    private static SoundEvent chickenAmbientSound() {
+        return SoundEvents.CHICKEN_SOUNDS.get(ChickenSoundVariants.SoundSet.CLASSIC).adultSounds().ambientSound().value();
+    }
+
+    private static SoundEvent chickenHurtSound() {
+        return SoundEvents.CHICKEN_SOUNDS.get(ChickenSoundVariants.SoundSet.CLASSIC).adultSounds().hurtSound().value();
+    }
+
+    private static SoundEvent chickenDeathSound() {
+        return SoundEvents.CHICKEN_SOUNDS.get(ChickenSoundVariants.SoundSet.CLASSIC).adultSounds().deathSound().value();
+    }
+
+    private static SoundEvent cowAmbientSound() {
+        return SoundEvents.COW_SOUNDS.get(CowSoundVariants.SoundSet.CLASSIC).ambientSound().value();
+    }
+
+    private static SoundEvent cowHurtSound() {
+        return SoundEvents.COW_SOUNDS.get(CowSoundVariants.SoundSet.CLASSIC).hurtSound().value();
+    }
+
+    private static SoundEvent cowDeathSound() {
+        return SoundEvents.COW_SOUNDS.get(CowSoundVariants.SoundSet.CLASSIC).deathSound().value();
+    }
+
+    private static SoundEvent pigAmbientSound() {
+        return SoundEvents.PIG_SOUNDS.get(PigSoundVariants.SoundSet.CLASSIC).adultSounds().ambientSound().value();
+    }
+
+    private static SoundEvent pigHurtSound() {
+        return SoundEvents.PIG_SOUNDS.get(PigSoundVariants.SoundSet.CLASSIC).adultSounds().hurtSound().value();
+    }
+
+    private static SoundEvent pigDeathSound() {
+        return SoundEvents.PIG_SOUNDS.get(PigSoundVariants.SoundSet.CLASSIC).adultSounds().deathSound().value();
     }
 }

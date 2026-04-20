@@ -2,8 +2,8 @@ package com.coffee.disguises.command;
 
 import com.coffee.disguises.DisguisesMod;
 import com.coffee.disguises.core.DisguiseManager;
+import com.coffee.disguises.util.PermissionCompat;
 import com.mojang.brigadier.CommandDispatcher;
-import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -26,7 +26,7 @@ public class UndisguiseCommand {
         dispatcher.register(
                 Commands.literal("undisguise")
                         // /undisguise — self
-                        .requires(Permissions.require("disguises.undisguise.self",
+                        .requires(PermissionCompat.require("disguises.undisguise.self",
                                 DisguisesMod.CONFIG.permLevelSelf))
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
@@ -35,7 +35,7 @@ public class UndisguiseCommand {
 
                         // /undisguise radius <num>
                         .then(Commands.literal("radius")
-                                .requires(Permissions.require("disguises.undisguise.radius",
+                                .requires(PermissionCompat.require("disguises.undisguise.radius",
                                         DisguisesMod.CONFIG.permLevelRadius))
                                 .then(Commands.argument("radius",
                                                 com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(0.5, 256.0))
@@ -67,7 +67,7 @@ public class UndisguiseCommand {
                         // EntityArgument.entity() accepts both @n[type=sheep] and a player name,
                         // so this single branch handles both cases.
                         .then(Commands.argument("target", EntityArgument.entity())
-                                .requires(Permissions.require("disguises.undisguise.others",
+                                .requires(PermissionCompat.require("disguises.undisguise.others",
                                         DisguisesMod.CONFIG.permLevelOthers))
                                 .executes(ctx -> {
                                     Entity target = EntityArgument.getEntity(ctx, "target");
