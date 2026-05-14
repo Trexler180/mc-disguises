@@ -103,6 +103,10 @@ public class DisguisesMod implements ModInitializer {
                 DisguiseManager.INSTANCE.saveDisguise(handler.player);
             }
             DisguiseManager.INSTANCE.removeDisguise(handler.player, false);
+            // Drop any per-observer state tied to the disconnecting player so it
+            // doesn't leak (small map entries, queued packet sends targeted at
+            // their now-dead connection, etc.).
+            PacketInterceptor.cleanupForRemovedObserver(handler.player.getUUID());
         });
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {

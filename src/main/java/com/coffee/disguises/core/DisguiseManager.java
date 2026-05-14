@@ -221,6 +221,17 @@ public class DisguiseManager {
             PacketInterceptor.refreshForNearbyPlayers(entity, null);
         }
 
+        // Always clear injected fake tab profiles and per-entity sync state across
+        // ALL observers, including out-of-range / cross-dim observers that
+        // refreshForNearbyPlayers skips.  Required so leftover entries (especially
+        // for showDisguiseInTab=true, where no deferred remove was queued) don't
+        // persist after disconnect/dim-change/undisguise.
+        net.minecraft.server.MinecraftServer mcServer = null;
+        if (entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            mcServer = level.getServer();
+        }
+        PacketInterceptor.cleanupForRemovedEntity(mcServer, entity.getUUID());
+
         // Restore vanilla self-view if it was active; save the preference so it is
         // automatically re-applied the next time the player disguises.
         if (entity instanceof ServerPlayer player) {
