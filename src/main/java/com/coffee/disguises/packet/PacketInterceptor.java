@@ -109,6 +109,21 @@ public class PacketInterceptor {
     private static final ConcurrentHashMap<UUID, SelfViewPuppet> selfViewPuppets = new ConcurrentHashMap<>();
 
     /**
+     * Tracks the fake tab-list profile UUIDs we have injected for player-disguise
+     * spawns: {observerUUID → {disguisedEntityUUID → fakeProfileUUID}}.
+     *
+     * Each time {@link #sendPlayerDisguiseSpawn} runs (initial disguise, async skin
+     * fetch callback, observer retracking) it inserts a fresh random profile into
+     * the observer's tab list.  Without this map, those entries accumulate and
+     * outlive the disguise itself — producing the "disguise shown twice" duplicate
+     * in the tab list, and the "fake player still visible after /undisguise"
+     * leftover entry.  We use it to remove the previous entry before injecting a
+     * new one, and to remove the final entry when the disguise is taken off.
+     */
+    private static final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, UUID>> injectedTabEntries =
+            new ConcurrentHashMap<>();
+
+    /**
      * Last-sent packed state for each puppet: bits 0–7 = entity flags byte, bits 8–15 = Pose ordinal.
      * Used to suppress redundant metadata updates in syncSelfViewPuppets.
      */
@@ -673,8 +688,15 @@ public class PacketInterceptor {
 
         Vec3 vel = entity.getDeltaMovement();
 
+        // Remove any tab entry we injected for this same disguised entity on a
+        // previous spawn (e.g. the async skin-fetch second pass).  Without this,
+        // the old fake "Notch" entry stays in the tab list alongside the new one
+        // and the disguise appears twice.
+        clearInjectedTabEntry(observer, entity.getUUID());
+
         // Inject fake profile into client tab list so the skin texture is known
         observer.connection.send(buildRawPlayerInfoPacket(fakeProfile));
+        recordInjectedTabEntry(observer, entity.getUUID(), fakeUUID);
 
         observer.connection.send(new ClientboundAddEntityPacket(
                 entity.getId(), fakeUUID,
@@ -849,8 +871,10 @@ public class PacketInterceptor {
      */
     private static void sendMetadataPacketToId(ServerPlayer observer, int entityId, Disguise disguise) {
         try {
+            // Pass the observer so MetadataBuilder can resolve registry-backed values
+            // (cat/frog/mooshroom variants) via the observer's level RegistryAccess.
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values =
-                    MetadataBuilder.build(disguise.getWatcher(), disguise.getType());
+                    MetadataBuilder.build(disguise.getWatcher(), disguise.getType(), observer);
             if (!values.isEmpty()) {
                 SENDING_DISGUISE_METADATA.set(true);
                 try {
@@ -937,6 +961,68 @@ public class PacketInterceptor {
      * PropertyMap has no no-arg constructor and PropertyMap.EMPTY is immutable, so we
      * must construct a fresh mutable PropertyMap and pass it to the 3-arg constructor.
      */
+    /**
+     * Removes any previously-injected fake tab profile for this (observer, entity)
+     * pair, both from the deferred queue and from the live client tab list.
+     * Safe to call when no entry exists.
+     */
+    private static void clearInjectedTabEntry(ServerPlayer observer, UUID entityUUID) {
+        var observerMap = injectedTabEntries.get(observer.getUUID());
+        if (observerMap == null) return;
+        UUID old = observerMap.remove(entityUUID);
+        if (observerMap.isEmpty()) injectedTabEntries.remove(observer.getUUID());
+        if (old == null) return;
+        pendingTabRemove.removeIf(tr -> tr.fakeUUID().equals(old));
+        try {
+            observer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(old)));
+        } catch (Exception ignored) {}
+    }
+
+    /** Records that {@code fakeUUID} is the current injected tab profile for this observer/entity pair. */
+    private static void recordInjectedTabEntry(ServerPlayer observer, UUID entityUUID, UUID fakeUUID) {
+        injectedTabEntries
+                .computeIfAbsent(observer.getUUID(), k -> new ConcurrentHashMap<>())
+                .put(entityUUID, fakeUUID);
+    }
+
+    /** Clears the tracked tab entry for every observer for the given disguised entity. */
+    private static void clearAllInjectedTabEntries(MinecraftServer server, Entity entity) {
+        cleanupForRemovedEntity(server, entity.getUUID());
+    }
+
+    /**
+     * Server-side cleanup of all per-observer state for a disguised entity that is
+     * leaving view (disconnect, dimension change, despawn, undisguise).  Removes
+     * lingering injected fake tab profiles from every online observer and clears
+     * any deferred position-sync state.  Safe to call regardless of whether the
+     * entity is still attached to a level.
+     */
+    public static void cleanupForRemovedEntity(MinecraftServer server, UUID entityUUID) {
+        if (server != null) {
+            for (ServerPlayer observer : server.getPlayerList().getPlayers()) {
+                clearInjectedTabEntry(observer, entityUUID);
+            }
+        }
+        // Remove any stale entries for observers that may have disconnected.
+        injectedTabEntries.values().forEach(m -> m.remove(entityUUID));
+        injectedTabEntries.entrySet().removeIf(e -> e.getValue().isEmpty());
+        lastSyncPos.remove(entityUUID);
+        pendingTabRemove.removeIf(tr -> {
+            // Any tab-remove still queued for an entity that's leaving view is now
+            // redundant; clearInjectedTabEntry already sent the live PlayerInfoRemove.
+            return false; // handled per-observer above via clearInjectedTabEntry
+        });
+    }
+
+    /** Removes all server-side state tied to a specific observer (called on observer disconnect). */
+    public static void cleanupForRemovedObserver(UUID observerUUID) {
+        injectedTabEntries.remove(observerUUID);
+        pendingEquipment.removeIf(pe -> pe.observer().getUUID().equals(observerUUID));
+        pendingTabRemove.removeIf(tr -> tr.observer().getUUID().equals(observerUUID));
+        pendingDataResend.removeIf(pe -> pe.observer().getUUID().equals(observerUUID));
+        lastSyncPos.values().forEach(m -> m.remove(observerUUID));
+    }
+
     private static GameProfile buildSkinProfile(UUID fakeUUID, GameProfile skinSource) {
         com.mojang.authlib.properties.PropertyMap props = new com.mojang.authlib.properties.PropertyMap(
                 com.google.common.collect.LinkedHashMultimap.create(skinSource.properties()));
@@ -1023,8 +1109,10 @@ public class PacketInterceptor {
     private static void sendMetadataPacket(ServerPlayer observer, Entity entity,
                                            Disguise disguise) {
         try {
+            // Pass the entity so MetadataBuilder can resolve registry-backed values
+            // (cat/frog/mooshroom variants) via the entity's level RegistryAccess.
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values =
-                    MetadataBuilder.build(disguise.getWatcher(), disguise.getType());
+                    MetadataBuilder.build(disguise.getWatcher(), disguise.getType(), entity);
             if (!values.isEmpty()) {
                 // Set bypass flag so EntityDataUpdateMixin knows this packet came from
                 // MetadataBuilder (correct types for the disguise) and must not be filtered.
@@ -1095,6 +1183,11 @@ public class PacketInterceptor {
             SENDING_DISGUISE_REMOVE.set(true);
             try { player.connection.send(new ClientboundRemoveEntitiesPacket(entity.getId())); }
             finally { SENDING_DISGUISE_REMOVE.set(false); }
+            // Clear any previously-injected fake tab entry for this observer/entity pair.
+            // sendPlayerDisguiseSpawn() also clears+injects, so this is the no-op redundancy
+            // safety net when the new state is non-player disguise or vanilla (undisguise),
+            // ensuring leftover "Notch" entries are removed from the tab list.
+            clearInjectedTabEntry(player, entity.getUUID());
             if (disguise != null) {
                 sendDisguisedSpawn(player, entity, disguise);
             } else {

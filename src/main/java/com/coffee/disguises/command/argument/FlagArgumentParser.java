@@ -68,7 +68,7 @@ public class FlagArgumentParser {
         List<String> warnings = new ArrayList<>();
         if (flagString == null || flagString.isBlank()) return warnings;
 
-        String[] tokens = flagString.trim().split("\\s+");
+        String[] tokens = tokenize(flagString);
         int[] i = {0};  // mutable index — helpers advance it only when they consume a token
 
         while (i[0] < tokens.length) {
@@ -105,6 +105,9 @@ public class FlagArgumentParser {
                 case "setcustomname", "customname", "name" -> {
                     String name = nextString(tokens, i);
                     if (name != null) {
+                        // Underscores are still translated to spaces for backwards compatibility
+                        // with the old unquoted syntax, but quoted strings like
+                        //   setCustomName "My Name" preserve the literal spaces in the quotes.
                         watcher.setCustomName(name.replace('_', ' '));
                         watcher.setCustomNameVisible(true);
                     } else {
@@ -1111,6 +1114,60 @@ public class FlagArgumentParser {
     /** Reads the next token as a string and advances the index, or returns null. */
     private static String nextString(String[] tokens, int[] i) {
         return (i[0] < tokens.length) ? tokens[i[0]++] : null;
+    }
+
+    /**
+     * Splits a flag string on whitespace, but keeps double-quoted segments
+     * as a single token (with embedded spaces preserved).  An escaped quote
+     * {@code \"} inside a quoted run becomes a literal {@code "}.
+     *
+     * Example:
+     *   setCustomName "Lord Notch" setHealth 20
+     * yields tokens: ["setCustomName", "Lord Notch", "setHealth", "20"].
+     *
+     * Unterminated quotes are tolerated — the run extends to end-of-input.
+     */
+    static String[] tokenize(String flagString) {
+        if (flagString == null) return new String[0];
+        String s = flagString.trim();
+        if (s.isEmpty()) return new String[0];
+
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuote = false;
+
+        for (int k = 0; k < s.length(); k++) {
+            char c = s.charAt(k);
+            if (inQuote) {
+                if (c == '\\' && k + 1 < s.length() && s.charAt(k + 1) == '"') {
+                    cur.append('"');
+                    k++;
+                } else if (c == '"') {
+                    inQuote = false;
+                    out.add(cur.toString());
+                    cur.setLength(0);
+                } else {
+                    cur.append(c);
+                }
+            } else {
+                if (c == '"') {
+                    if (cur.length() > 0) {
+                        out.add(cur.toString());
+                        cur.setLength(0);
+                    }
+                    inQuote = true;
+                } else if (Character.isWhitespace(c)) {
+                    if (cur.length() > 0) {
+                        out.add(cur.toString());
+                        cur.setLength(0);
+                    }
+                } else {
+                    cur.append(c);
+                }
+            }
+        }
+        if (cur.length() > 0) out.add(cur.toString());
+        return out.toArray(new String[0]);
     }
 
     /** Reads the next token as an int, advances if successful, returns default if not. */

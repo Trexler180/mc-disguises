@@ -361,6 +361,10 @@ public class DisguiseCommand {
                 "§aDisguising as player §e" + skinName + "§a, fetching skin…"), false);
 
         SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
+            // Guard: the player may have undisguised (or switched disguise) while
+            // we were waiting for the async fetch.  Without this check, the
+            // callback would re-spawn the fake-player entity after /undisguise.
+            if (DisguiseManager.INSTANCE.getDisguise(player) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(player, disguise);
@@ -436,6 +440,8 @@ public class DisguiseCommand {
                         + " §aas player §e" + skinName + "§a, fetching skin…"), true);
 
         SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
+            // Guard: skip if the target's disguise was removed/changed mid-fetch.
+            if (DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(target, disguise);
@@ -494,6 +500,8 @@ public class DisguiseCommand {
                 "§aDisguising entity as player §e" + skinName + "§a, fetching skin…"), true);
 
         SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
+            // Guard: skip if the target's disguise was removed/changed mid-fetch.
+            if (DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(target, disguise);
@@ -571,6 +579,8 @@ public class DisguiseCommand {
                 // Async skin fetch; refresh when it arrives
                 final Entity fe = entity;
                 SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
+                    // Guard: skip if this entity's disguise was removed/changed mid-fetch.
+                    if (DisguiseManager.INSTANCE.getDisguise(fe) != disguise) return;
                     if (profile != null) {
                         disguise.setSkinProfile(profile);
                         PacketInterceptor.refreshForNearbyPlayers(fe, disguise);
