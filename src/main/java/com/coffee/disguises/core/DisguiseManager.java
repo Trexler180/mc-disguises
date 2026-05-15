@@ -9,7 +9,14 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -243,6 +250,9 @@ public class DisguiseManager {
 
         DisguiseEvents.AFTER_UNDISGUISE.invoker().onAfterUndisguise(entity);
         DisguisesMod.LOGGER.debug("Removed disguise from entity {}", entity.getUUID());
+        if (sendVanillaRespawn && DisguisesMod.CONFIG.persistDisguises) {
+            removePersistedDisguise(entity.getUUID());
+        }
         return true;
     }
 
@@ -250,28 +260,28 @@ public class DisguiseManager {
     // Persistence
     // =========================================================================
 
-    /** Queue saving a player's disguise (called on disconnect). Batch is handled at server stop. */
+    /** Persist a player's current disguise immediately. Called on disconnect before active state is removed. */
     public void saveDisguise(ServerPlayer player) {
-        DisguisesMod.LOGGER.debug("Queuing disguise persist for {}", player.getUUID());
+        Disguise disguise = getDisguise(player);
+        if (disguise == null) {
+            removePersistedDisguise(player.getUUID());
+            return;
+        }
+
+        JsonObject root = readPersistedRoot();
+        root.add(player.getUUID().toString(), serializeDisguise(disguise));
+        writePersistedRoot(root);
+        DisguisesMod.LOGGER.debug("Persisted disguise for {}", player.getUUID());
     }
 
     /** Persist all active disguises to disk. Called on server stop. */
     public void persistAll(MinecraftServer server) {
-        JsonObject root = new JsonObject();
+        JsonObject root = readPersistedRoot();
         for (Map.Entry<UUID, Disguise> entry : activeDisguises.entrySet()) {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("type", entry.getValue().getType().getId());
-            obj.addProperty("selfDisguise", entry.getValue().isSelfDisguise());
-            obj.addProperty("showName", entry.getValue().isShowName());
-            // TODO: serialize FlagWatcher fields per-type (add toJson() to each watcher)
-            root.add(entry.getKey().toString(), obj);
+            root.add(entry.getKey().toString(), serializeDisguise(entry.getValue()));
         }
-        try (Writer w = Files.newBufferedWriter(PERSIST_PATH)) {
-            GSON.toJson(root, w);
-            DisguisesMod.LOGGER.info("Persisted {} disguises to disk.", activeDisguises.size());
-        } catch (IOException e) {
-            DisguisesMod.LOGGER.error("Failed to persist disguises", e);
-        }
+        writePersistedRoot(root);
+        DisguisesMod.LOGGER.info("Persisted {} active disguises to disk.", activeDisguises.size());
     }
 
     /** Load persisted disguises from disk. Called on server start. */
@@ -284,14 +294,7 @@ public class DisguiseManager {
                 try {
                     UUID uuid = UUID.fromString(entry.getKey());
                     JsonObject obj = entry.getValue().getAsJsonObject();
-                    String typeId = obj.get("type").getAsString();
-                    com.coffee.disguises.disguise.DisguiseType.fromId(typeId).ifPresent(type -> {
-                        Disguise disguise = Disguise.builder(type)
-                                .selfDisguise(obj.has("selfDisguise") && obj.get("selfDisguise").getAsBoolean())
-                                .showName(obj.has("showName") && obj.get("showName").getAsBoolean())
-                                .build();
-                        activeDisguises.put(uuid, disguise);
-                    });
+                    deserializeDisguise(obj).ifPresent(disguise -> activeDisguises.put(uuid, disguise));
                 } catch (Exception ex) {
                     DisguisesMod.LOGGER.warn("Failed to load persisted disguise entry: {}",
                             entry.getKey());
@@ -300,6 +303,222 @@ public class DisguiseManager {
             DisguisesMod.LOGGER.info("Loaded {} persisted disguises.", activeDisguises.size());
         } catch (IOException e) {
             DisguisesMod.LOGGER.error("Failed to load persisted disguises", e);
+        }
+    }
+
+    private void removePersistedDisguise(UUID uuid) {
+        JsonObject root = readPersistedRoot();
+        if (root.remove(uuid.toString()) != null) {
+            writePersistedRoot(root);
+        }
+    }
+
+    private static JsonObject readPersistedRoot() {
+        if (!Files.exists(PERSIST_PATH)) return new JsonObject();
+        try (Reader r = Files.newBufferedReader(PERSIST_PATH)) {
+            JsonObject root = GSON.fromJson(r, JsonObject.class);
+            return root != null ? root : new JsonObject();
+        } catch (IOException | JsonParseException e) {
+            DisguisesMod.LOGGER.error("Failed to read persisted disguises", e);
+            return new JsonObject();
+        }
+    }
+
+    private static void writePersistedRoot(JsonObject root) {
+        try (Writer w = Files.newBufferedWriter(PERSIST_PATH)) {
+            GSON.toJson(root, w);
+        } catch (IOException e) {
+            DisguisesMod.LOGGER.error("Failed to persist disguises", e);
+        }
+    }
+
+    private static JsonObject serializeDisguise(Disguise disguise) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("type", disguise.getType().getId());
+        obj.addProperty("selfDisguise", disguise.isSelfDisguise());
+        obj.addProperty("showName", disguise.isShowName());
+        if (disguise instanceof com.coffee.disguises.disguise.PlayerDisguise pd) {
+            obj.addProperty("playerName", pd.getDisguiseName());
+        }
+        obj.add("watcher", serializeWatcher(disguise.getWatcher()));
+        return obj;
+    }
+
+    private static Optional<Disguise> deserializeDisguise(JsonObject obj) {
+        if (obj == null || !obj.has("type")) return Optional.empty();
+        String typeId = obj.get("type").getAsString();
+        return com.coffee.disguises.disguise.DisguiseType.fromId(typeId).map(type -> {
+            com.coffee.disguises.watcher.FlagWatcher watcher = type.createDefaultWatcher();
+            if (obj.has("watcher") && obj.get("watcher").isJsonObject()) {
+                applyWatcherFields(watcher, obj.getAsJsonObject("watcher"));
+            }
+
+            boolean selfDisguise = obj.has("selfDisguise") && obj.get("selfDisguise").getAsBoolean();
+            boolean showName = obj.has("showName") && obj.get("showName").getAsBoolean();
+
+            if (type == com.coffee.disguises.disguise.DisguiseType.PLAYER) {
+                String name = obj.has("playerName") ? obj.get("playerName").getAsString() : "Player";
+                return com.coffee.disguises.disguise.PlayerDisguise.builder(name)
+                        .watcher(watcher)
+                        .selfDisguise(selfDisguise)
+                        .showName(showName)
+                        .build();
+            }
+
+            return Disguise.builder(type)
+                    .watcher(watcher)
+                    .selfDisguise(selfDisguise)
+                    .showName(showName)
+                    .build();
+        });
+    }
+
+    private static JsonObject serializeWatcher(com.coffee.disguises.watcher.FlagWatcher watcher) {
+        JsonObject root = new JsonObject();
+        for (Field field : watcherFields(watcher.getClass())) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            try {
+                field.setAccessible(true);
+                Object value = field.get(watcher);
+                JsonElement encoded = encodeWatcherValue(value);
+                if (encoded != null) root.add(watcherFieldKey(field), encoded);
+            } catch (Exception e) {
+                DisguisesMod.LOGGER.debug("Skipping watcher field {} during persist: {}",
+                        field.getName(), e.getMessage());
+            }
+        }
+        return root;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void applyWatcherFields(com.coffee.disguises.watcher.FlagWatcher watcher, JsonObject values) {
+        for (Field field : watcherFields(watcher.getClass())) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            JsonElement value = values.get(watcherFieldKey(field));
+            if (value == null) value = values.get(field.getName());
+            if (value == null) continue;
+            try {
+                field.setAccessible(true);
+                Object decoded = decodeWatcherValue(field.getType(), value);
+                if (decoded != null || !field.getType().isPrimitive()) {
+                    field.set(watcher, decoded);
+                }
+            } catch (Exception e) {
+                DisguisesMod.LOGGER.debug("Skipping persisted watcher field {}: {}",
+                        field.getName(), e.getMessage());
+            }
+        }
+    }
+
+    private static List<Field> watcherFields(Class<?> type) {
+        List<Field> fields = new ArrayList<>();
+        Class<?> c = type;
+        while (c != null && c != Object.class) {
+            fields.addAll(Arrays.asList(c.getDeclaredFields()));
+            c = c.getSuperclass();
+        }
+        return fields;
+    }
+
+    private static String watcherFieldKey(Field field) {
+        return field.getDeclaringClass().getSimpleName() + "." + field.getName();
+    }
+
+    private static JsonElement encodeWatcherValue(Object value) {
+        if (value == null) return JsonNull.INSTANCE;
+        if (value instanceof Boolean b) return new JsonPrimitive(b);
+        if (value instanceof Number n) return new JsonPrimitive(n);
+        if (value instanceof String s) return new JsonPrimitive(s);
+        if (value instanceof Enum<?> e) return new JsonPrimitive(e.name());
+        if (value instanceof net.minecraft.core.Rotations r) {
+            JsonArray arr = new JsonArray();
+            arr.add(r.x());
+            arr.add(r.y());
+            arr.add(r.z());
+            return arr;
+        }
+        if (value instanceof Map<?, ?> map) {
+            JsonObject obj = new JsonObject();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() instanceof EquipmentSlot slot && entry.getValue() instanceof ItemStack stack
+                        && !stack.isEmpty()) {
+                    obj.addProperty(slot.name(), stack.getItem().toString());
+                }
+            }
+            return obj;
+        }
+        if (value instanceof BlockState state) {
+            int id = net.minecraft.world.level.block.Block.getId(state);
+            return new JsonPrimitive(id);
+        }
+        if (value instanceof ItemStack stack) {
+            JsonObject obj = new JsonObject();
+            if (!stack.isEmpty()) {
+                obj.addProperty("item", stack.getItem().toString());
+                obj.addProperty("count", stack.getCount());
+            }
+            return obj;
+        }
+        return null;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object decodeWatcherValue(Class<?> type, JsonElement element) {
+        if (element == null || element.isJsonNull()) return null;
+        if (type == boolean.class || type == Boolean.class) return element.getAsBoolean();
+        if (type == byte.class || type == Byte.class) return element.getAsByte();
+        if (type == int.class || type == Integer.class) return element.getAsInt();
+        if (type == long.class || type == Long.class) return element.getAsLong();
+        if (type == float.class || type == Float.class) return element.getAsFloat();
+        if (type == double.class || type == Double.class) return element.getAsDouble();
+        if (type == String.class) return element.getAsString();
+        if (type.isEnum()) return Enum.valueOf((Class<? extends Enum>) type, element.getAsString());
+        if (type == net.minecraft.core.Rotations.class && element.isJsonArray()) {
+            JsonArray arr = element.getAsJsonArray();
+            if (arr.size() >= 3) {
+                return new net.minecraft.core.Rotations(
+                        arr.get(0).getAsFloat(), arr.get(1).getAsFloat(), arr.get(2).getAsFloat());
+            }
+        }
+        if (type == BlockState.class) {
+            return net.minecraft.world.level.block.Block.stateById(element.getAsInt());
+        }
+        if (Map.class.isAssignableFrom(type) && element.isJsonObject()) {
+            EnumMap<EquipmentSlot, ItemStack> equipment = new EnumMap<>(EquipmentSlot.class);
+            JsonObject obj = element.getAsJsonObject();
+            for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+                try {
+                    EquipmentSlot slot = EquipmentSlot.valueOf(entry.getKey());
+                    Item item = parseItem(entry.getValue().getAsString());
+                    if (item != null) equipment.put(slot, new ItemStack(item));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            return equipment.isEmpty() ? null : equipment;
+        }
+        if (type == ItemStack.class && element.isJsonObject()) {
+            JsonObject obj = element.getAsJsonObject();
+            if (!obj.has("item")) return ItemStack.EMPTY;
+            Item item = parseItem(obj.get("item").getAsString());
+            int count = obj.has("count") ? obj.get("count").getAsInt() : 1;
+            return item != null ? new ItemStack(item, Math.max(1, count)) : ItemStack.EMPTY;
+        }
+        return null;
+    }
+
+    private static Item parseItem(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String name = raw.toLowerCase(Locale.ROOT);
+        int colon = name.indexOf(':');
+        if (colon >= 0) name = name.substring(colon + 1);
+        String fieldName = name.toUpperCase(Locale.ROOT);
+        try {
+            Field field = Items.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            Object value = field.get(null);
+            return value instanceof Item item ? item : null;
+        } catch (ReflectiveOperationException e) {
+            return null;
         }
     }
 

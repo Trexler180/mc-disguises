@@ -63,7 +63,8 @@ public class DisguisesMod implements ModInitializer {
             PacketInterceptor.syncSelfViewPuppets(server);
 
             if (!CONFIG.showDisguiseActionBar) return;
-            if (server.getTickCount() % 20 != 0) return;
+            if (CONFIG.actionBarIntervalTicks <= 0) return;
+            if (server.getTickCount() % CONFIG.actionBarIntervalTicks != 0) return;
             for (UUID uuid : DisguiseManager.INSTANCE.getAllDisguisedUUIDs()) {
                 ServerPlayer player = server.getPlayerList().getPlayer(uuid);
                 if (player != null) {
