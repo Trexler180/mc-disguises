@@ -105,10 +105,7 @@ public class FlagArgumentParser {
                 case "setcustomname", "customname", "name" -> {
                     String name = nextString(tokens, i);
                     if (name != null) {
-                        // Underscores are still translated to spaces for backwards compatibility
-                        // with the old unquoted syntax, but quoted strings like
-                        //   setCustomName "My Name" preserve the literal spaces in the quotes.
-                        watcher.setCustomName(name.replace('_', ' '));
+                        watcher.setCustomName(name);
                         watcher.setCustomNameVisible(true);
                     } else {
                         warnings.add("'setCustomName' requires a name value.");
