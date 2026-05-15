@@ -29,12 +29,9 @@ import java.util.function.Consumer;
  *     (player's own entity is rendered by the LocalPlayer object, not via
  *     the entity registry, so sending nothing is the safe default).
  *
- *   • If the disguise has isSelfDisguise() == true   →  fall through and
- *     call PacketInterceptor.sendDisguisedSpawn.  This updates the client-
- *     side entity registry entry for the player's ID to use the disguise
- *     EntityType, which affects name tags, particles, and any other system
- *     that looks up entities by ID on the client.  The LocalPlayer HUD/hands
- *     are unaffected (they don't go through the registry), so this is safe.
+ *   • If the disguise has isSelfDisguise() == true   →  still skip this real
+ *     entity ID. Self-view is handled by PacketInterceptor's separate puppet
+ *     entity so the client's LocalPlayer registry entry is never replaced.
  *
  * This injection fires for the player's own entity during:
  *   • Initial world load
@@ -69,13 +66,7 @@ public abstract class ServerEntityMixin {
         Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
         if (disguise == null) return;
 
-        if (player == entity) {
-            // Self-view: only send disguise packets to the player for their own
-            // entity if selfDisguise is explicitly enabled.  Sending without the
-            // flag could break the client's own entity state on reload.
-            if (!disguise.isSelfDisguise()) return;
-            // Fall through — send disguised spawn to self
-        }
+        if (player == entity) return;
 
         // Cancel vanilla's sendPairingData so the real entity type never reaches the client.
         ci.cancel();

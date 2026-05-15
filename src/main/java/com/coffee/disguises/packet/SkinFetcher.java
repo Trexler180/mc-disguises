@@ -34,11 +34,14 @@ public class SkinFetcher {
     private static final MinecraftSessionService SESSION_SERVICE =
             AUTH_SERVICE.createMinecraftSessionService();
 
-    private static final Executor EXECUTOR = Executors.newCachedThreadPool(r -> {
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4, r -> {
         Thread t = new Thread(r, "disguises-skin-fetcher");
         t.setDaemon(true);
         return t;
     });
+
+    private static final ConcurrentHashMap<String, CompletableFuture<GameProfile>> IN_FLIGHT =
+            new ConcurrentHashMap<>();
 
     private static final Map<String, GameProfile> CACHE = Collections.synchronizedMap(
             new LinkedHashMap<>(16, 0.75f, true) {
@@ -55,7 +58,15 @@ public class SkinFetcher {
         GameProfile hit = CACHE.get(key);
         if (hit != null) { server.execute(() -> cb.accept(hit)); return; }
 
-        CompletableFuture.<GameProfile>supplyAsync(() -> resolveByName(name, server), EXECUTOR)
+        IN_FLIGHT.computeIfAbsent(key, k ->
+                        CompletableFuture.supplyAsync(() -> resolveByName(name, server), EXECUTOR)
+                                .orTimeout(10, TimeUnit.SECONDS)
+                                .exceptionally(e -> {
+                                    DisguisesMod.LOGGER.warn("Disguises: skin fetch for '{}' failed: {}",
+                                            name, rootMessage(e));
+                                    return null;
+                                })
+                                .whenComplete((p, e) -> IN_FLIGHT.remove(k)))
                 .thenAccept(p -> server.execute(() -> {
                     if (p != null) CACHE.put(key, p);
                     cb.accept(p);
@@ -67,7 +78,15 @@ public class SkinFetcher {
         GameProfile hit = CACHE.get(key);
         if (hit != null) { server.execute(() -> cb.accept(hit)); return; }
 
-        CompletableFuture.<GameProfile>supplyAsync(() -> resolveByUUID(uuid, server), EXECUTOR)
+        IN_FLIGHT.computeIfAbsent(key, k ->
+                        CompletableFuture.supplyAsync(() -> resolveByUUID(uuid, server), EXECUTOR)
+                                .orTimeout(10, TimeUnit.SECONDS)
+                                .exceptionally(e -> {
+                                    DisguisesMod.LOGGER.warn("Disguises: skin fetch for UUID {} failed: {}",
+                                            uuid, rootMessage(e));
+                                    return null;
+                                })
+                                .whenComplete((p, e) -> IN_FLIGHT.remove(k)))
                 .thenAccept(p -> server.execute(() -> {
                     if (p != null) CACHE.put(key, p);
                     cb.accept(p);
@@ -75,6 +94,13 @@ public class SkinFetcher {
     }
 
     public static void clearCache() { CACHE.clear(); }
+
+    private static String rootMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null) cur = cur.getCause();
+        String message = cur.getMessage();
+        return cur.getClass().getSimpleName() + (message != null ? ": " + message : "");
+    }
 
     // -----------------------------------------------------------------------
 

@@ -903,7 +903,9 @@ public class PacketInterceptor {
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack item = (custom != null && custom.containsKey(slot))
                     ? custom.get(slot).copy()
-                    : source.getItemBySlot(slot).copy();
+                    : DisguisesMod.CONFIG.showEquipmentThroughDisguise
+                            ? source.getItemBySlot(slot).copy()
+                            : ItemStack.EMPTY;
             equipment.add(com.mojang.datafixers.util.Pair.of(slot, item));
         }
         observer.connection.send(new ClientboundSetEquipmentPacket(entityId, equipment));
@@ -1138,7 +1140,9 @@ public class PacketInterceptor {
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack item = (custom != null && custom.containsKey(slot))
                     ? custom.get(slot).copy()
-                    : living.getItemBySlot(slot).copy();
+                    : DisguisesMod.CONFIG.showEquipmentThroughDisguise
+                            ? living.getItemBySlot(slot).copy()
+                            : ItemStack.EMPTY;
             equipment.add(com.mojang.datafixers.util.Pair.of(slot, item));
         }
         observer.connection.send(new ClientboundSetEquipmentPacket(entity.getId(), equipment));
