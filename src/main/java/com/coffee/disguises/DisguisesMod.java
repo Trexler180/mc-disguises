@@ -8,6 +8,7 @@ import com.coffee.disguises.command.UndisguiseCommand;
 import com.coffee.disguises.compat.VanishCompat;
 import com.coffee.disguises.core.DisguiseManager;
 import com.coffee.disguises.packet.PacketInterceptor;
+import com.coffee.disguises.packet.SkinFetcher;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -32,6 +33,7 @@ public class DisguisesMod implements ModInitializer {
         CONFIG = DisguisesConfig.load();
 
         VanishCompat.init();
+        SkinFetcher.init();
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             DisguiseCommand.register(dispatcher);

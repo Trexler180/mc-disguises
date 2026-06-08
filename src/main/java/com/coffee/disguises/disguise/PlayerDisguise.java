@@ -32,7 +32,9 @@ public class PlayerDisguise extends Disguise {
     /** Called once the async skin fetch completes. */
     public void setSkinProfile(GameProfile profile) { this.skinProfile = profile; }
 
-    public boolean hasSkin() { return skinProfile != null && !skinProfile.properties().isEmpty(); }
+    public boolean hasSkin() {
+        return skinProfile != null && skinProfile.properties().containsKey("textures");
+    }
 
     // ---- Builder ----
 

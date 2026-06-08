@@ -44,7 +44,7 @@ public class Disguise {
         private final DisguiseType type;
         private FlagWatcher watcher;
         private boolean selfDisguise = false;
-        private boolean showName = false;
+        private boolean showName = true;
 
         public Builder(DisguiseType type) {
             this.type = type;

@@ -107,11 +107,29 @@ public final class DisguiseTypeArgument {
     public static CompletableFuture<Suggestions> suggestFlags(
             CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
 
-        // Resolve type from context — may not be available if tab-completing type still
-        DisguiseType type = null;
+        // Resolve type from context. For command paths that don't carry a "type"
+        // argument (e.g. /disguise player <name> <flags> or /disguise as <skin> <flags>)
+        // the disguise is always a PLAYER, so fall back to that.
+        DisguiseType type = DisguiseType.PLAYER;
         try {
             type = get(ctx, "type");
         } catch (Exception ignored) {}
+
+        return suggestFlagsFor(type, builder);
+    }
+
+    /**
+     * Flag suggestions hardcoded to {@link DisguiseType#PLAYER}. Wire this to flag
+     * arguments on player-disguise command branches that do not expose a "type"
+     * argument in the command tree.
+     */
+    public static CompletableFuture<Suggestions> suggestPlayerFlags(
+            CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        return suggestFlagsFor(DisguiseType.PLAYER, builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestFlagsFor(
+            DisguiseType type, SuggestionsBuilder builder) {
 
         String soFar = builder.getRemaining();
         List<String> candidates = FlagArgumentParser.suggest(soFar, type);

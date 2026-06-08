@@ -354,7 +354,7 @@ public class DisguiseManager {
             }
 
             boolean selfDisguise = obj.has("selfDisguise") && obj.get("selfDisguise").getAsBoolean();
-            boolean showName = obj.has("showName") && obj.get("showName").getAsBoolean();
+            boolean showName = !obj.has("showName") || obj.get("showName").getAsBoolean();
 
             if (type == com.coffee.disguises.disguise.DisguiseType.PLAYER) {
                 String name = obj.has("playerName") ? obj.get("playerName").getAsString() : "Player";

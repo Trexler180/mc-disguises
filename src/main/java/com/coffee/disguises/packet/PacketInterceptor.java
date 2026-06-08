@@ -286,7 +286,7 @@ public class PacketInterceptor {
             tabUUID = UUID.randomUUID();
             GameProfile fakeProfile = buildSkinProfile(tabUUID, skinSource);
 
-            player.connection.send(buildRawPlayerInfoPacket(fakeProfile));
+            player.connection.send(buildRawPlayerInfoPacket(fakeProfile, false));
             player.connection.send(new ClientboundAddEntityPacket(
                     puppetId, tabUUID,
                     player.getX(), player.getY(), player.getZ(),
@@ -386,8 +386,9 @@ public class PacketInterceptor {
             net.minecraft.world.scores.PlayerTeam team =
                     new net.minecraft.world.scores.PlayerTeam(tempSb, selfTeamName);
             team.setCollisionRule(net.minecraft.world.scores.Team.CollisionRule.NEVER);
-            if (disguise instanceof PlayerDisguise) {
-                // Also suppress the floating nametag above the player-type puppet.
+            if (disguise instanceof PlayerDisguise && !disguise.isShowName()) {
+                // Also suppress the floating nametag above the player-type puppet,
+                // unless the disguise explicitly requested the name be shown.
                 team.setNameTagVisibility(net.minecraft.world.scores.Team.Visibility.NEVER);
             }
             if (puppetMemberName != null) {
@@ -604,6 +605,10 @@ public class PacketInterceptor {
         try { observer.connection.send(new ClientboundRemoveEntitiesPacket(entity.getId())); }
         finally { SENDING_DISGUISE_REMOVE.set(false); }
 
+        // Tear down any prior player-disguise nametag-hide team; sendPlayerDisguiseSpawn
+        // re-adds it if the new disguise is a hidden-name player disguise.
+        removeNametagHideTeam(observer, entity.getUUID());
+
         // Determine which disguise this observer should see
         Disguise disguise = DisguiseManager.INSTANCE.getDisguiseForObserver(entity, observer.getUUID());
         if (disguise == null) disguise = DisguiseManager.INSTANCE.getDisguise(entity);
@@ -694,8 +699,12 @@ public class PacketInterceptor {
         // and the disguise appears twice.
         clearInjectedTabEntry(observer, entity.getUUID());
 
-        // Inject fake profile into client tab list so the skin texture is known
-        observer.connection.send(buildRawPlayerInfoPacket(fakeProfile));
+        // Inject fake profile into client player-info storage so the skin texture is known.
+        // Keep the entry alive for the disguise lifetime; modern clients consult this
+        // profile while rendering the player entity, so removing it after a short delay
+        // can leave Java-online and Bedrock disguises stuck on the default skin.
+        observer.connection.send(buildRawPlayerInfoPacket(
+                fakeProfile, DisguisesMod.CONFIG.showDisguiseInTab));
         recordInjectedTabEntry(observer, entity.getUUID(), fakeUUID);
 
         observer.connection.send(new ClientboundAddEntityPacket(
@@ -710,20 +719,27 @@ public class PacketInterceptor {
         sendEquipmentPacket(observer, entity);
         enqueueEquipmentResend(observer, entity);
 
+        // ── Floating nametag visibility ───────────────────────────────────────
+        // For a PLAYER-type disguise the nametag above the head is rendered from the
+        // fake GameProfile name, NOT from the DATA_CUSTOM_NAME_VISIBLE flag — so the
+        // setCustomNameVisible / hidename flags cannot hide it on their own.  We hide
+        // it the same way vanilla scoreboards do: by putting the entity's client-side
+        // scoreboard name (the fake profile name) into a team with NameTagVisibility=NEVER.
+        // Unless the disguise explicitly asked to show the name, hide it.
+        if (pd.isShowName()) {
+            removeNametagHideTeam(observer, entity.getUUID());
+        } else {
+            sendNametagHideTeam(observer, entity.getUUID(), fakeProfile.name());
+        }
+
         // Resend full entity data after 3 ticks to deliver skin-customisation byte
         if (entity.level() instanceof ServerLevel level && level.getServer() != null) {
             pendingDataResend.add(new PendingEntityDataResend(
                     level.getServer().getTickCount() + 3, observer, entity));
         }
 
-        // Remove fake entry from tab list after configured delay
-        if (entity.level() instanceof ServerLevel level && level.getServer() != null) {
-            int delay = DisguisesMod.CONFIG.tabRemoveDelayTicks;
-            if (!DisguisesMod.CONFIG.showDisguiseInTab && delay >= 0) {
-                pendingTabRemove.add(new PendingTabRemove(
-                        level.getServer().getTickCount() + delay, observer, fakeUUID));
-            }
-        }
+        // The fake player-info entry is removed by clearInjectedTabEntry() when the
+        // disguise refreshes, leaves view, or is removed.
     }
 
     // =========================================================================
@@ -1003,6 +1019,9 @@ public class PacketInterceptor {
         if (server != null) {
             for (ServerPlayer observer : server.getPlayerList().getPlayers()) {
                 clearInjectedTabEntry(observer, entityUUID);
+                // Also remove the player-disguise nametag-hide team across all observers,
+                // including out-of-range / cross-dimension ones that refreshForNearbyPlayers skips.
+                removeNametagHideTeam(observer, entityUUID);
             }
         }
         // Remove any stale entries for observers that may have disconnected.
@@ -1036,12 +1055,13 @@ public class PacketInterceptor {
     // =========================================================================
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static ClientboundPlayerInfoUpdatePacket buildRawPlayerInfoPacket(GameProfile fakeProfile) {
+    private static ClientboundPlayerInfoUpdatePacket buildRawPlayerInfoPacket(GameProfile fakeProfile,
+                                                                              boolean listed) {
         var actions = java.util.EnumSet.of(
                 ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
                 ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED
         );
-        ClientboundPlayerInfoUpdatePacket.Entry entry = buildInfoEntry(fakeProfile);
+        ClientboundPlayerInfoUpdatePacket.Entry entry = buildInfoEntry(fakeProfile, listed);
 
         // Strategy 1: internal (EnumSet, List<Entry>) constructor
         for (java.lang.reflect.Constructor<?> ctor :
@@ -1076,7 +1096,8 @@ public class PacketInterceptor {
         throw new RuntimeException("[Disguises] Could not build ClientboundPlayerInfoUpdatePacket.");
     }
 
-    private static ClientboundPlayerInfoUpdatePacket.Entry buildInfoEntry(GameProfile fakeProfile) {
+    private static ClientboundPlayerInfoUpdatePacket.Entry buildInfoEntry(GameProfile fakeProfile,
+                                                                         boolean listed) {
         // Entry is a record in MC 1.21.11 with this exact public constructor:
         //   Entry(UUID profileId, GameProfile profile, boolean listed, int latency,
         //         GameType gameMode, Component displayName, boolean showHat,
@@ -1085,7 +1106,7 @@ public class PacketInterceptor {
             return new ClientboundPlayerInfoUpdatePacket.Entry(
                     fakeProfile.id(),           // profileId
                     fakeProfile,                // profile (carries textures property)
-                    true,                       // listed
+                    listed,                     // listed in tab
                     0,                          // latency
                     net.minecraft.world.level.GameType.SURVIVAL, // gameMode
                     null,                       // displayName
@@ -1102,6 +1123,61 @@ public class PacketInterceptor {
     private static GameProfile buildDefaultProfile(String name) {
         UUID uuid = UUID.nameUUIDFromBytes(("DisguisesFake:" + name).getBytes());
         return new GameProfile(uuid, name);
+    }
+
+    // =========================================================================
+    // Player-disguise nametag hiding (observer-side)
+    // =========================================================================
+
+    /**
+     * Returns the client-side scoreboard team name used to hide the floating nametag
+     * above a player-disguised entity for an observer.
+     *
+     * The name is derived from the disguised entity's UUID so it is:
+     *   • unique per disguised entity (no cross-entity interference), and
+     *   • removable from cleanup paths that only have the UUID (not the entity id).
+     *
+     * Team names delivered over the wire are not subject to the 16-character limit
+     * the {@code /team} command enforces — the client stores them in a plain map —
+     * so the dash-stripped UUID (32 hex chars) is safe.
+     */
+    private static String nametagHideTeamName(UUID entityUUID) {
+        return "dsgn" + entityUUID.toString().replace("-", "");
+    }
+
+    /**
+     * Sends a client-side team (NameTagVisibility=NEVER) containing {@code memberName}
+     * so the floating nametag above the player-disguised entity is hidden for this observer.
+     *
+     * {@code memberName} must equal the entity's client-side {@code getScoreboardName()} —
+     * for a RemotePlayer that is the GameProfile name (the fake profile name we spawned with).
+     */
+    private static void sendNametagHideTeam(ServerPlayer observer, UUID entityUUID, String memberName) {
+        if (memberName == null) return;
+        try {
+            net.minecraft.world.scores.Scoreboard tempSb = new net.minecraft.world.scores.Scoreboard();
+            net.minecraft.world.scores.PlayerTeam team =
+                    new net.minecraft.world.scores.PlayerTeam(tempSb, nametagHideTeamName(entityUUID));
+            team.setNameTagVisibility(net.minecraft.world.scores.Team.Visibility.NEVER);
+            team.getPlayers().add(memberName);
+            observer.connection.send(
+                    net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
+                            .createAddOrModifyPacket(team, true));
+        } catch (Exception e) {
+            DisguisesMod.LOGGER.debug("[Disguises] Could not send nametag-hide team: {}", e.getMessage());
+        }
+    }
+
+    /** Removes the nametag-hide team for this observer/entity pair. Safe to call unconditionally. */
+    private static void removeNametagHideTeam(ServerPlayer observer, UUID entityUUID) {
+        try {
+            net.minecraft.world.scores.Scoreboard tempSb = new net.minecraft.world.scores.Scoreboard();
+            net.minecraft.world.scores.PlayerTeam team =
+                    new net.minecraft.world.scores.PlayerTeam(tempSb, nametagHideTeamName(entityUUID));
+            observer.connection.send(
+                    net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
+                            .createRemovePacket(team));
+        } catch (Exception ignored) {}
     }
 
     // =========================================================================
@@ -1192,6 +1268,10 @@ public class PacketInterceptor {
             // safety net when the new state is non-player disguise or vanilla (undisguise),
             // ensuring leftover "Notch" entries are removed from the tab list.
             clearInjectedTabEntry(player, entity.getUUID());
+            // Tear down any prior player-disguise nametag-hide team; sendPlayerDisguiseSpawn
+            // re-adds it when the new disguise is a hidden-name player disguise.  Required so
+            // that switching to a non-player disguise or undisguising restores the nametag.
+            removeNametagHideTeam(player, entity.getUUID());
             if (disguise != null) {
                 sendDisguisedSpawn(player, entity, disguise);
             } else {

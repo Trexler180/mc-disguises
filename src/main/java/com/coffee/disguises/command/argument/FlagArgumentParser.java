@@ -985,6 +985,11 @@ public class FlagArgumentParser {
                 "setCustomName", "setCustomNameVisible"
         ));
 
+        // Special command tokens consumed by DisguiseCommand.parseFlags (not by apply()).
+        // Surfaced here so tab-completion offers them. For PLAYER disguises the floating
+        // nametag is toggled via showName/hideName; selfView controls the self-disguise view.
+        flags.addAll(List.of("selfView", "noSelfView", "showName", "hideName"));
+
         if (isAssignable(wc, LivingEntityWatcher.class)) {
             flags.add("setHealth");
         }

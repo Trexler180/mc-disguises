@@ -68,7 +68,7 @@ public class DisguiseCommand {
                         .then(Commands.literal("player")
                                 .requires(PermissionCompat.require("disguises.disguise.self",
                                         DisguisesMod.CONFIG.permLevelSelf))
-                                .then(Commands.argument("playerName", StringArgumentType.word())
+                                .then(Commands.argument("playerName", StringArgumentType.string())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "playerName");
                                             return disguiseSelfAsPlayer(ctx.getSource(), name, "");
@@ -90,7 +90,7 @@ public class DisguiseCommand {
                         .then(Commands.literal("as")
                                 .requires(PermissionCompat.require("disguises.disguise.self",
                                         DisguisesMod.CONFIG.permLevelSelf))
-                                .then(Commands.argument("skinName", StringArgumentType.word())
+                                .then(Commands.argument("skinName", StringArgumentType.string())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "skinName");
                                             return disguiseSelfAsPlayer(ctx.getSource(), name, "");
@@ -116,7 +116,7 @@ public class DisguiseCommand {
                                 .then(Commands.argument("target", EntityArgument.entity())
                                         // entity → player <skinName> [flags]
                                         .then(Commands.literal("player")
-                                                .then(Commands.argument("skinName", StringArgumentType.word())
+                                                .then(Commands.argument("skinName", StringArgumentType.string())
                                                         .executes(ctx -> {
                                                             Entity target = EntityArgument.getEntity(ctx, "target");
                                                             String skin = StringArgumentType.getString(ctx, "skinName");
@@ -162,7 +162,7 @@ public class DisguiseCommand {
                                 .then(Commands.argument("radius", DoubleArgumentType.doubleArg(0.5, 256.0))
                                         // radius → player <skinName> [flags]
                                         .then(Commands.literal("player")
-                                                .then(Commands.argument("skinName", StringArgumentType.word())
+                                                .then(Commands.argument("skinName", StringArgumentType.string())
                                                         .executes(ctx -> {
                                                             double radius = DoubleArgumentType.getDouble(ctx, "radius");
                                                             String skin = StringArgumentType.getString(ctx, "skinName");
@@ -262,6 +262,7 @@ public class DisguiseCommand {
                                         })
                                         .then(Commands.argument("otherFlags",
                                                         StringArgumentType.greedyString())
+                                                .suggests(DisguiseTypeArgument::suggestFlags)
                                                 .executes(ctx -> {
                                                     DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
@@ -273,7 +274,7 @@ public class DisguiseCommand {
                                         // /disguise <type> <target> player <name> [flags]
                                         .then(Commands.literal("player")
                                                 .then(Commands.argument("targetPlayerName",
-                                                                StringArgumentType.word())
+                                                                StringArgumentType.string())
                                                         .executes(ctx -> {
                                                             ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
                                                             String name = StringArgumentType.getString(ctx, "targetPlayerName");
@@ -281,6 +282,7 @@ public class DisguiseCommand {
                                                         })
                                                         .then(Commands.argument("targetFlags",
                                                                         StringArgumentType.greedyString())
+                                                                .suggests(DisguiseTypeArgument::suggestPlayerFlags)
                                                                 .executes(ctx -> {
                                                                     ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
                                                                     String name = StringArgumentType.getString(ctx, "targetPlayerName");
@@ -364,7 +366,8 @@ public class DisguiseCommand {
             // Guard: the player may have undisguised (or switched disguise) while
             // we were waiting for the async fetch.  Without this check, the
             // callback would re-spawn the fake-player entity after /undisguise.
-            if (DisguiseManager.INSTANCE.getDisguise(player) != disguise) return;
+            // Also bail if the backing entity is gone (e.g. logged off mid-fetch).
+            if (player.isRemoved() || DisguiseManager.INSTANCE.getDisguise(player) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(player, disguise);
@@ -440,8 +443,9 @@ public class DisguiseCommand {
                         + " §aas player §e" + skinName + "§a, fetching skin…"), true);
 
         SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
-            // Guard: skip if the target's disguise was removed/changed mid-fetch.
-            if (DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
+            // Guard: skip if the target's disguise was removed/changed mid-fetch,
+            // or the target entity is gone (broken/killed/logged off).
+            if (target.isRemoved() || DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(target, disguise);
@@ -500,8 +504,9 @@ public class DisguiseCommand {
                 "§aDisguising entity as player §e" + skinName + "§a, fetching skin…"), true);
 
         SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
-            // Guard: skip if the target's disguise was removed/changed mid-fetch.
-            if (DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
+            // Guard: skip if the target's disguise was removed/changed mid-fetch,
+            // or the target entity is gone (broken/killed/logged off).
+            if (target.isRemoved() || DisguiseManager.INSTANCE.getDisguise(target) != disguise) return;
             if (profile != null) {
                 disguise.setSkinProfile(profile);
                 PacketInterceptor.refreshForNearbyPlayers(target, disguise);
@@ -579,8 +584,9 @@ public class DisguiseCommand {
                 // Async skin fetch; refresh when it arrives
                 final Entity fe = entity;
                 SkinFetcher.fetchByName(skinName, source.getServer(), profile -> {
-                    // Guard: skip if this entity's disguise was removed/changed mid-fetch.
-                    if (DisguiseManager.INSTANCE.getDisguise(fe) != disguise) return;
+                    // Guard: skip if this entity's disguise was removed/changed mid-fetch,
+                    // or the entity is gone (broken/killed/logged off).
+                    if (fe.isRemoved() || DisguiseManager.INSTANCE.getDisguise(fe) != disguise) return;
                     if (profile != null) {
                         disguise.setSkinProfile(profile);
                         PacketInterceptor.refreshForNearbyPlayers(fe, disguise);
@@ -671,7 +677,7 @@ public class DisguiseCommand {
     private static ParseResult parseFlags(String flagString, FlagWatcher watcher,
                                           DisguiseType type) {
         boolean selfView = DisguisesMod.CONFIG.selfDisguiseDefault;
-        boolean showName = false;
+        boolean showName = true;
         StringBuilder remaining = new StringBuilder();
 
         if (flagString != null && !flagString.isBlank()) {
