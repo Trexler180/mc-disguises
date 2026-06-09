@@ -91,14 +91,14 @@ public class VanishCompat {
     private static class ScoreboardTagVanishProvider implements VanishProvider {
         @Override
         public boolean isVanished(Entity entity) {
-            return entity.entityTags().contains("vanished");
+            return EntityTagCompat.tags(entity).contains("vanished");
         }
 
         @Override
         public boolean canSeeVanished(ServerPlayer observer) {
             // Ops can always see vanished entities
             return PermissionCompat.check(observer.createCommandSourceStack(), "disguises.vanish.see", 2)
-                    || observer.entityTags().contains("vanish.see");
+                    || EntityTagCompat.tags(observer).contains("vanish.see");
         }
     }
 }

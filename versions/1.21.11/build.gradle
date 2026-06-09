@@ -1,0 +1,134 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version '1.16.1'
+	id 'maven-publish'
+}
+
+def repoRoot = file("../..")
+def rootProperties = new Properties()
+file("${repoRoot}/gradle.properties").withInputStream { rootProperties.load(it) }
+
+def minecraftVersion = "1.21.11"
+def loaderVersion = "0.19.2"
+def fabricVersion = "0.141.4+1.21.11"
+def clothConfigVersion = "21.11.153"
+def modmenuVersion = "17.0.0"
+def javaRelease = 21
+
+version = rootProperties.getProperty("mod_version")
+group = rootProperties.getProperty("maven_group")
+
+base {
+	archivesName = rootProperties.getProperty("archives_base_name")
+}
+
+repositories {
+	mavenCentral()
+	maven {
+		name = "shedaniel"
+		url = 'https://maven.shedaniel.me/'
+		content {
+			includeGroup "me.shedaniel.cloth"
+			includeGroup "me.shedaniel"
+		}
+	}
+	maven {
+		name = "TerraformersMC"
+		url = 'https://maven.terraformersmc.com/releases/'
+		content {
+			includeGroup "com.terraformersmc"
+		}
+	}
+	maven {
+		name = "lucko"
+		url = 'https://oss.sonatype.org/content/repositories/snapshots'
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"disguises" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+sourceSets {
+	main {
+		java.srcDirs = ["${repoRoot}/src/main/java"]
+		java.exclude("com/coffee/disguises/disguise/SoundCompat.java")
+		java.exclude("com/coffee/disguises/compat/EntityTagCompat.java")
+		resources.srcDirs = ["${repoRoot}/src/main/resources"]
+	}
+	client {
+		java.srcDirs = ["${repoRoot}/src/client/java"]
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraftVersion}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricVersion}"
+
+	// Keep MixinExtras bundled explicitly for compatibility with expression injections.
+	include(modImplementation("io.github.llamalad7:mixinextras-fabric:0.5.0"))
+
+	// Cloth Config (optional - for ModMenu config screen)
+	modCompileOnly("me.shedaniel.cloth:cloth-config-fabric:${clothConfigVersion}") {
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+	modRuntimeOnly("me.shedaniel.cloth:cloth-config-fabric:${clothConfigVersion}") {
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+
+	// ModMenu (optional)
+	modCompileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+	modRuntimeOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+}
+
+processResources {
+	inputs.property "version", project.version
+	inputs.property "minecraft_dependency", "~${minecraftVersion}"
+	inputs.property "loader_dependency", ">=${loaderVersion}"
+	inputs.property "java_dependency", ">=${javaRelease}"
+	inputs.property "modmenu_entrypoint", "com.coffee.disguises.client.compat.ModMenuApiImpl"
+	filesMatching("fabric.mod.json") {
+		expand(
+				"version": project.version,
+				"minecraft_dependency": "~${minecraftVersion}",
+				"loader_dependency": ">=${loaderVersion}",
+				"java_dependency": ">=${javaRelease}",
+				"modmenu_entrypoint": "com.coffee.disguises.client.compat.ModMenuApiImpl"
+		)
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = javaRelease
+}
+
+tasks.named("compileJava", JavaCompile) {
+	source(fileTree("src/main/java"))
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+	archiveClassifier = "mc1.21.11"
+}
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+
+	sourceCompatibility = JavaVersion.toVersion(javaRelease)
+	targetCompatibility = JavaVersion.toVersion(javaRelease)
+}
+
+jar {
+	from("${repoRoot}/LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}

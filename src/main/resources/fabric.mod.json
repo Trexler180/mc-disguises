@@ -10,17 +10,17 @@
   "entrypoints": {
     "main": ["com.coffee.disguises.DisguisesMod"],
     "client": ["com.coffee.disguises.client.DisguisesModClient"],
-    "modmenu": ["com.coffee.disguises.client.compat.ModMenuApiImpl"],
+    "modmenu": ["${modmenu_entrypoint}"],
     "disguises:vanish": []
   },
   "mixins": [
     "disguises.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.19.2",
+    "fabricloader": "${loader_dependency}",
     "fabric-api": "*",
-    "minecraft": "~26.1.2",
-    "java": ">=25"
+    "minecraft": "${minecraft_dependency}",
+    "java": "${java_dependency}"
   },
   "suggests": {
     "cloth-config2": "*",
