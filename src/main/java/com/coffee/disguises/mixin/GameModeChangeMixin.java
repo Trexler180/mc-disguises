@@ -11,15 +11,19 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Handles disguise self-view puppet lifecycle across game-mode changes.
+ * Handles disguise visibility across game-mode changes.
  *
  * When a disguised player enters spectator mode:
  *   - The self-view puppet is removed.  Spectators are invisible to non-spectators,
  *     and a floating puppet at the player's position is wrong.
+ *   - Other observers get a remove + vanilla player respawn.  Clients hide spectators
+ *     by checking the tab-list game mode of PLAYER entities — a mob or fake-profile
+ *     disguise entity is never matched against that entry, so without this the
+ *     disguise would keep standing there while the real player flies around unseen.
  *
  * When a disguised player leaves spectator mode:
- *   - The self-view puppet is re-created if the player's preference is still on.
- *     (The puppet was cleaned up on spectator entry, so applySelfView starts fresh.)
+ *   - The disguise is re-spawned for nearby observers, and the self-view puppet is
+ *     re-created if the player's preference is still on.
  */
 @Mixin(ServerPlayer.class)
 public abstract class GameModeChangeMixin {
@@ -34,18 +38,19 @@ public abstract class GameModeChangeMixin {
         if (disguise == null) return;
 
         if (gameMode == GameType.SPECTATOR) {
-            // Entering spectator — remove the self-view puppet without touching the disguise.
-            // The disguise stays active so others still see it until it times out naturally.
+            // Entering spectator — keep the disguise stored, but show observers the
+            // vanilla player entity instead (which their clients render invisible
+            // based on the tab-list game mode).
+            PacketInterceptor.refreshForNearbyPlayers(player, null);
             if (disguise.isSelfDisguise()) {
                 PacketInterceptor.removeSelfView(player);
             }
         } else {
-            // Leaving spectator (or switching between other modes) — re-apply self-view
-            // if the disguise still has it enabled.  applySelfView is idempotent:
-            // it calls removeSelfViewPuppetIfPresent first, so duplicate calls are safe.
-            if (disguise.isSelfDisguise()) {
-                PacketInterceptor.applySelfView(player, disguise);
-            }
+            // Leaving spectator (or switching between other modes) — re-spawn the
+            // disguise for observers and re-apply self-view if still enabled.
+            // refreshForNearbyPlayers also re-applies the self-view puppet; both
+            // paths are idempotent, so duplicate calls are safe.
+            PacketInterceptor.refreshForNearbyPlayers(player, disguise);
         }
     }
 }

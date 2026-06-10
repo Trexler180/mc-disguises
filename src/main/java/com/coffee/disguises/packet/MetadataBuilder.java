@@ -345,6 +345,20 @@ public class MetadataBuilder {
 
     private static final int IDX_MOOSHROOM_VARIANT       = 17;
 
+    /**
+     * Watcher ordinal → data-driven registry key path, in the legacy enum order the
+     * watchers (and FlagArgumentParser name tables) use.  The registries themselves
+     * are ordered by datapack load order (alphabetical), so ordinals can NOT be used
+     * as registry IDs — see putHolderFromRegistry.
+     */
+    private static final String[] CAT_VARIANT_NAMES = {
+            "tabby", "black", "red", "siamese", "british_shorthair", "calico",
+            "persian", "ragdoll", "white", "jellie", "all_black"
+    };
+    private static final String[] FROG_VARIANT_NAMES = { "temperate", "warm", "cold" };
+    /** MooshroomWatcher: 0 = temperate (brown), 1 = warm (red). */
+    private static final String[] COW_VARIANT_NAMES  = { "temperate", "warm", "cold" };
+
     private static final int IDX_VILLAGER_DATA           = 17;
 
     private static final int IDX_ZOMBIE_VILLAGER_CONVERTING = 19;
@@ -974,7 +988,8 @@ public class MetadataBuilder {
 
         if (watcher instanceof CatWatcher catw) {
             putByte(list, F_TAMEABLE_FLAGS,      catw.getTameableFlags());
-            putHolderFromRegistry(list, F_CAT_VARIANT, registryAccess, Registries.CAT_VARIANT, catw.getVariant());
+            putHolderFromRegistry(list, F_CAT_VARIANT, registryAccess, Registries.CAT_VARIANT,
+                    CAT_VARIANT_NAMES, catw.getVariant());
             putBool(list, F_CAT_LYING,           catw.isLying());
             putBool(list, F_CAT_RELAXED,         catw.isRelaxed());
             putInt(list,  F_CAT_COLLAR_COLOR,    catw.getCollarColor().getId());
@@ -983,13 +998,15 @@ public class MetadataBuilder {
         // ── Frog ──────────────────────────────────────────────────────────────
 
         if (watcher instanceof FrogWatcher frogw) {
-            putHolderFromRegistry(list, F_FROG_VARIANT, registryAccess, Registries.FROG_VARIANT, frogw.getVariant());
+            putHolderFromRegistry(list, F_FROG_VARIANT, registryAccess, Registries.FROG_VARIANT,
+                    FROG_VARIANT_NAMES, frogw.getVariant());
         }
 
         // ── Mooshroom ─────────────────────────────────────────────────────────
 
         if (watcher instanceof MooshroomWatcher moow) {
-            putHolderFromRegistry(list, F_MOOSHROOM_VARIANT, registryAccess, Registries.COW_VARIANT, moow.getVariant());
+            putHolderFromRegistry(list, F_MOOSHROOM_VARIANT, registryAccess, Registries.COW_VARIANT,
+                    COW_VARIANT_NAMES, moow.getVariant());
         }
 
         // ── Villager ──────────────────────────────────────────────────────────
@@ -1379,19 +1396,40 @@ public class MetadataBuilder {
     }
 
     /**
-     * Looks up entry {@code rawId} in the dynamic registry identified by {@code key},
-     * wraps it as a Holder, and emits it.  If {@code registryAccess} is null (e.g. no
-     * entity is available for the call site) the entry is silently skipped.
+     * Looks up entry {@code names[rawId]} (by registry key path) in the dynamic registry
+     * identified by {@code key}, wraps it as a Holder, and emits it.  If {@code registryAccess}
+     * is null (e.g. no entity is available for the call site) the entry is silently skipped.
+     *
+     * Lookup is by NAME, not by numeric registry ID: these variant registries are
+     * data-driven, so their numeric order is datapack load order (alphabetical by
+     * JSON file name) — e.g. cat_variant id 0 is "all_black", not "tabby".  The
+     * watchers store legacy enum ordinals, so resolving them via byId() would render
+     * the wrong variant for nearly every value.  The numeric ID is only used as a
+     * last-resort fallback when the name is missing from the registry (modded datapack
+     * removed it).
      */
     @SuppressWarnings("unchecked")
     private static <T> void putHolderFromRegistry(List<SynchedEntityData.DataValue<?>> list, Field f,
                                                    RegistryAccess registryAccess,
                                                    ResourceKey<net.minecraft.core.Registry<T>> key,
-                                                   int rawId) {
+                                                   String[] names, int rawId) {
         if (f == null || registryAccess == null) return;
         try {
             net.minecraft.core.Registry<T> registry = registryAccess.lookupOrThrow(key);
-            T value = registry.byId(rawId);
+            T value = null;
+            String name = (names != null && rawId >= 0 && rawId < names.length) ? names[rawId] : null;
+            if (name != null) {
+                for (T candidate : registry) {
+                    // var: the id type is named ResourceLocation on 1.21.11 but
+                    // Identifier on 26.1.2, and this source compiles against both.
+                    var candidateKey = registry.getKey(candidate);
+                    if (candidateKey != null && candidateKey.getPath().equals(name)) {
+                        value = candidate;
+                        break;
+                    }
+                }
+            }
+            if (value == null) value = registry.byId(rawId);
             if (value == null) value = registry.byId(0);
             if (value == null) return;
             Holder<T> holder = registry.wrapAsHolder(value);

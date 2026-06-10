@@ -68,6 +68,12 @@ public abstract class ServerEntityMixin {
 
         if (player == entity) return;
 
+        // Disguised player currently in spectator mode: let vanilla pairing data
+        // through so the observer's client sees a normal player entity, which it
+        // renders invisible based on the tab-list game mode.  The disguise spawn
+        // is re-sent by GameModeChangeMixin when the player leaves spectator.
+        if (entity instanceof ServerPlayer spectator && spectator.isSpectator()) return;
+
         // Cancel vanilla's sendPairingData so the real entity type never reaches the client.
         ci.cancel();
 

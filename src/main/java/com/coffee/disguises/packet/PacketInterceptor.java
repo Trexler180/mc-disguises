@@ -91,6 +91,7 @@ public class PacketInterceptor {
     private record PendingEquipment(long tick, ServerPlayer observer, Entity entity) {}
     private record PendingTabRemove(long tick, ServerPlayer observer, UUID fakeUUID) {}
     private record PendingEntityDataResend(long tick, ServerPlayer observer, Entity entity) {}
+    private record PendingSelfViewRespawn(long tick, UUID playerUUID) {}
 
     /**
      * Tracks an active self-view puppet entity.
@@ -104,6 +105,10 @@ public class PacketInterceptor {
     private static final ConcurrentLinkedQueue<PendingEquipment>       pendingEquipment  = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<PendingTabRemove>       pendingTabRemove  = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<PendingEntityDataResend> pendingDataResend = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<PendingSelfViewRespawn>  pendingSelfViewRespawn = new ConcurrentLinkedQueue<>();
+
+    /** Ticks to wait after a respawn / dimension change before re-spawning the self-view puppet. */
+    private static final int SELF_VIEW_RESPAWN_DELAY_TICKS = 10;
 
     /** Active self-view puppets: player UUID → puppet state. */
     private static final ConcurrentHashMap<UUID, SelfViewPuppet> selfViewPuppets = new ConcurrentHashMap<>();
@@ -198,6 +203,17 @@ public class PacketInterceptor {
             if (tr.tick() > tick) return false;
             if (!tr.observer().isAlive() || tr.observer().isRemoved()) return true;
             tr.observer().connection.send(new ClientboundPlayerInfoRemovePacket(List.of(tr.fakeUUID())));
+            return true;
+        });
+
+        pendingSelfViewRespawn.removeIf(pr -> {
+            if (pr.tick() > tick) return false;
+            ServerPlayer player = server.getPlayerList().getPlayer(pr.playerUUID());
+            if (player == null) return true;  // logged off — drop silently
+            Disguise disguise = DisguiseManager.INSTANCE.getDisguise(player);
+            if (disguise != null && disguise.isSelfDisguise() && !player.isSpectator()) {
+                applySelfView(player, disguise);
+            }
             return true;
         });
 
@@ -428,11 +444,27 @@ public class PacketInterceptor {
      */
     public static void transferSelfView(ServerPlayer oldPlayer, ServerPlayer newPlayer,
                                         Disguise disguise) {
-        // Silently discard the stale puppet entry — no packets to the dead connection.
-        selfViewPuppets.remove(oldPlayer.getUUID());
+        // Discard the stale puppet entry.  The puppet ENTITY is already gone client-side
+        // (the respawn packet resets the client level), but the tab list survives a
+        // respawn on the same connection — remove the old fake tab entry explicitly or
+        // it leaks a ghost entry on every death.
+        SelfViewPuppet stale = selfViewPuppets.remove(oldPlayer.getUUID());
         lastPuppetState.remove(oldPlayer.getUUID());
-        // Spawn a fresh puppet on the new player's active connection.
-        applySelfView(newPlayer, disguise);
+        if (stale != null && stale.tabUUID() != null) {
+            pendingTabRemove.removeIf(tr -> tr.fakeUUID().equals(stale.tabUUID()));
+            newPlayer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(stale.tabUUID())));
+        }
+
+        // Defer the fresh puppet spawn: at AFTER_RESPAWN time the client is still
+        // re-initializing its level, and entity/team packets sent immediately can be
+        // discarded — leaving the player without self-view until the next re-disguise.
+        if (newPlayer.level() instanceof ServerLevel level && level.getServer() != null) {
+            pendingSelfViewRespawn.add(new PendingSelfViewRespawn(
+                    level.getServer().getTickCount() + SELF_VIEW_RESPAWN_DELAY_TICKS,
+                    newPlayer.getUUID()));
+        } else {
+            applySelfView(newPlayer, disguise);
+        }
     }
 
     /** Internal: despawn the puppet for this player, if one exists, and clear the map entry. */
@@ -1028,11 +1060,8 @@ public class PacketInterceptor {
         injectedTabEntries.values().forEach(m -> m.remove(entityUUID));
         injectedTabEntries.entrySet().removeIf(e -> e.getValue().isEmpty());
         lastSyncPos.remove(entityUUID);
-        pendingTabRemove.removeIf(tr -> {
-            // Any tab-remove still queued for an entity that's leaving view is now
-            // redundant; clearInjectedTabEntry already sent the live PlayerInfoRemove.
-            return false; // handled per-observer above via clearInjectedTabEntry
-        });
+        // pendingTabRemove entries need no cleanup here: clearInjectedTabEntry above
+        // already sent the live PlayerInfoRemove for every online observer.
     }
 
     /** Removes all server-side state tied to a specific observer (called on observer disconnect). */
@@ -1041,6 +1070,7 @@ public class PacketInterceptor {
         pendingEquipment.removeIf(pe -> pe.observer().getUUID().equals(observerUUID));
         pendingTabRemove.removeIf(tr -> tr.observer().getUUID().equals(observerUUID));
         pendingDataResend.removeIf(pe -> pe.observer().getUUID().equals(observerUUID));
+        pendingSelfViewRespawn.removeIf(pr -> pr.playerUUID().equals(observerUUID));
         lastSyncPos.values().forEach(m -> m.remove(observerUUID));
     }
 
