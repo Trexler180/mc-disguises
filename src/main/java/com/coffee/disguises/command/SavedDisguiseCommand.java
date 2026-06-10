@@ -1,16 +1,22 @@
 package com.coffee.disguises.command;
 
 import com.coffee.disguises.DisguisesMod;
+import com.coffee.disguises.command.argument.DisguiseTypeArgument;
 import com.coffee.disguises.core.SavedDisguisesManager;
+import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.util.PermissionCompat;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * /savedisguise - manage named disguise presets.
@@ -35,10 +41,14 @@ public class SavedDisguiseCommand {
                         )
 
                         // /savedisguise save <name> <type+flags>
+                        // Name suggestions show existing presets (overwrite);
+                        // the disguise string suggests type IDs, then flags.
                         .then(Commands.literal("save")
                                 .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests(SavedDisguiseCommand::suggestPresetNames)
                                         .then(Commands.argument("disguiseString",
                                                         StringArgumentType.greedyString())
+                                                .suggests(DisguiseTypeArgument::suggestTypeThenFlags)
                                                 .executes(ctx -> {
                                                     String name = StringArgumentType.getString(ctx, "name");
                                                     String dstr = StringArgumentType.getString(ctx, "disguiseString");
@@ -51,18 +61,7 @@ public class SavedDisguiseCommand {
                         // /savedisguise apply <name>
                         .then(Commands.literal("apply")
                                 .then(Commands.argument("name", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            try {
-                                                ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                                List<String> presets = SavedDisguisesManager.INSTANCE.list(
-                                                        player.getUUID());
-                                                String partial = builder.getRemaining().toLowerCase();
-                                                for (String p : presets) {
-                                                    if (p.startsWith(partial)) builder.suggest(p);
-                                                }
-                                            } catch (Exception ignored) {}
-                                            return builder.buildFuture();
-                                        })
+                                        .suggests(SavedDisguiseCommand::suggestPresetNames)
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "name");
                                             return applyPreset(ctx.getSource(), name);
@@ -73,18 +72,7 @@ public class SavedDisguiseCommand {
                         // /savedisguise delete <name>
                         .then(Commands.literal("delete")
                                 .then(Commands.argument("name", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            try {
-                                                ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                                List<String> presets = SavedDisguisesManager.INSTANCE.list(
-                                                        player.getUUID());
-                                                String partial = builder.getRemaining().toLowerCase();
-                                                for (String p : presets) {
-                                                    if (p.startsWith(partial)) builder.suggest(p);
-                                                }
-                                            } catch (Exception ignored) {}
-                                            return builder.buildFuture();
-                                        })
+                                        .suggests(SavedDisguiseCommand::suggestPresetNames)
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "name");
                                             return deletePreset(ctx.getSource(), name);
@@ -92,6 +80,20 @@ public class SavedDisguiseCommand {
                                 )
                         )
         );
+    }
+
+    /** Suggests the command source's own saved preset names. */
+    private static CompletableFuture<Suggestions> suggestPresetNames(
+            CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        try {
+            ServerPlayer player = ctx.getSource().getPlayerOrException();
+            List<String> presets = SavedDisguisesManager.INSTANCE.list(player.getUUID());
+            String partial = builder.getRemaining().toLowerCase();
+            for (String p : presets) {
+                if (p.startsWith(partial)) builder.suggest(p);
+            }
+        } catch (Exception ignored) {}
+        return builder.buildFuture();
     }
 
     private static int listPresets(CommandSourceStack source)
@@ -115,6 +117,21 @@ public class SavedDisguiseCommand {
     private static int savePreset(CommandSourceStack source, String name, String disguiseString)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+
+        // Validate up front: apply runs the preset as "/disguise <preset>", so the
+        // first token must be a disguise type or the player-skin form.  Rejecting
+        // here beats a confusing failure later at apply time.
+        String first = disguiseString.trim().split("\\s+")[0].toLowerCase();
+        boolean valid = first.equals("player") || first.equals("as")
+                || DisguiseType.fromId(first).isPresent();
+        if (!valid) {
+            source.sendFailure(Component.literal(
+                    "§cUnknown disguise type §e" + first
+                            + "§c. Use §e/savedisguise save " + name
+                            + " <type> [flags...]§c (or §eplayer <name>§c)."));
+            return 0;
+        }
+
         SavedDisguisesManager.INSTANCE.save(player.getUUID(), name, disguiseString);
         source.sendSuccess(() -> Component.literal(
                 "§aSaved disguise preset §e" + name + " §7→ §a" + disguiseString), false);

@@ -28,8 +28,14 @@ import java.util.*;
  *   /disguise wolf setTamed setAngry setCollarColor BLUE
  *
  * Boolean flags accept an OPTIONAL value token (true/false/yes/no/on/off/1/0).
- * If the next token is NOT one of those keywords, the flag defaults to TRUE and
+ * If the next token is NOT one of those keywords, the flag's default applies and
  * the token is NOT consumed — it will be parsed as the next flag name.
+ *
+ * The bare-flag default depends on context:
+ *   • disguise creation (toggle=false): bare flag = TRUE   (/disguise sheep setSheared)
+ *   • /disguise modify   (toggle=true): bare flag FLIPS the current value, so
+ *     running "modify setGlowing" twice turns glowing on and back off.  An
+ *     explicit value always sets it ("modify setGlowing false").
  *
  * ─── THE OLD i++ BUG (FIXED) ─────────────────────────────────────────────────
  *
@@ -57,14 +63,26 @@ public class FlagArgumentParser {
     // =========================================================================
 
     /**
+     * Apply flag tokens to the given watcher with creation semantics
+     * (bare boolean flags set TRUE).
+     */
+    public static List<String> apply(FlagWatcher watcher, DisguiseType type, String flagString) {
+        return apply(watcher, type, flagString, false);
+    }
+
+    /**
      * Apply flag tokens to the given watcher.
      *
      * @param watcher    the watcher to mutate
      * @param type       the DisguiseType (used for applicability checks)
      * @param flagString the raw flag string from the command argument
+     * @param toggle     if true (modify context), a bare boolean flag flips the
+     *                   watcher's current value instead of always setting TRUE;
+     *                   explicit true/false values are unaffected
      * @return list of parse warnings (non-fatal; shown to the user as yellow messages)
      */
-    public static List<String> apply(FlagWatcher watcher, DisguiseType type, String flagString) {
+    public static List<String> apply(FlagWatcher watcher, DisguiseType type, String flagString,
+                                     boolean toggle) {
         List<String> warnings = new ArrayList<>();
         if (flagString == null || flagString.isBlank()) return warnings;
 
@@ -79,28 +97,28 @@ public class FlagArgumentParser {
                 // ── Universal Entity flags ───────────────────────────────────
 
                 case "setfire", "fire", "onfire" ->
-                        watcher.setOnFire(nextBool(tokens, i, true));
+                        watcher.setOnFire(nextBool(tokens, i, toggle, watcher.isOnFire()));
 
                 case "setinvisible", "invisible" ->
-                        watcher.setInvisible(nextBool(tokens, i, true));
+                        watcher.setInvisible(nextBool(tokens, i, toggle, watcher.isInvisible()));
 
                 case "setglowing", "glowing", "glow" ->
-                        watcher.setGlowing(nextBool(tokens, i, true));
+                        watcher.setGlowing(nextBool(tokens, i, toggle, watcher.isGlowing()));
 
                 case "setsilent", "silent" ->
-                        watcher.setSilent(nextBool(tokens, i, true));
+                        watcher.setSilent(nextBool(tokens, i, toggle, watcher.isSilent()));
 
                 case "setnogravity", "nogravity", "fly" ->
-                        watcher.setNoGravity(nextBool(tokens, i, true));
+                        watcher.setNoGravity(nextBool(tokens, i, toggle, watcher.isNoGravity()));
 
                 case "setcrouching", "crouching", "sneak", "crouch" ->
-                        watcher.setCrouching(nextBool(tokens, i, true));
+                        watcher.setCrouching(nextBool(tokens, i, toggle, watcher.isCrouching()));
 
                 case "setsprinting", "sprinting", "sprint" ->
-                        watcher.setSprinting(nextBool(tokens, i, true));
+                        watcher.setSprinting(nextBool(tokens, i, toggle, watcher.isSprinting()));
 
                 case "setswimming", "swimming", "swim" ->
-                        watcher.setSwimming(nextBool(tokens, i, true));
+                        watcher.setSwimming(nextBool(tokens, i, toggle, watcher.isSwimming()));
 
                 case "setcustomname", "customname", "name" -> {
                     String name = nextString(tokens, i);
@@ -113,7 +131,7 @@ public class FlagArgumentParser {
                 }
 
                 case "setcustomnamevisible", "shownametag", "nametag" ->
-                        watcher.setCustomNameVisible(nextBool(tokens, i, true));
+                        watcher.setCustomNameVisible(nextBool(tokens, i, toggle, watcher.isCustomNameVisible()));
 
                 // ── LivingEntity ─────────────────────────────────────────────
 
@@ -131,7 +149,7 @@ public class FlagArgumentParser {
 
                 case "setbaby", "baby" -> {
                     if (watcher instanceof AgeableWatcher aw) {
-                        aw.setBaby(nextBool(tokens, i, true));
+                        aw.setBaby(nextBool(tokens, i, toggle, aw.isBaby()));
                     } else {
                         warnings.add("'setBaby' is not applicable to " + type.getId() + ".");
                     }
@@ -167,7 +185,7 @@ public class FlagArgumentParser {
 
                 case "setsheared", "sheared", "shear" -> {
                     if (watcher instanceof SheepWatcher sw) {
-                        sw.setSheared(nextBool(tokens, i, true));
+                        sw.setSheared(nextBool(tokens, i, toggle, sw.isSheared()));
                     } else {
                         warnings.add("'setSheared' is not applicable to " + type.getId() + ".");
                     }
@@ -177,7 +195,7 @@ public class FlagArgumentParser {
 
                 case "setpowered", "powered", "charged", "charge" -> {
                     if (watcher instanceof CreeperWatcher cw) {
-                        cw.setPowered(nextBool(tokens, i, true));
+                        cw.setPowered(nextBool(tokens, i, toggle, cw.isPowered()));
                     } else {
                         warnings.add("'setPowered' is not applicable to " + type.getId() + ".");
                     }
@@ -185,7 +203,7 @@ public class FlagArgumentParser {
 
                 case "setignited", "ignited", "ignite", "fuse" -> {
                     if (watcher instanceof CreeperWatcher cw) {
-                        cw.setIgnited(nextBool(tokens, i, true));
+                        cw.setIgnited(nextBool(tokens, i, toggle, cw.isIgnited()));
                     } else {
                         warnings.add("'setIgnited' is not applicable to " + type.getId() + ".");
                     }
@@ -210,7 +228,7 @@ public class FlagArgumentParser {
 
                 case "settamed", "tamed", "tame" -> {
                     if (watcher instanceof WolfWatcher ww) {
-                        ww.setTamed(nextBool(tokens, i, true));
+                        ww.setTamed(nextBool(tokens, i, toggle, ww.isTamed()));
                     } else {
                         warnings.add("'setTamed' is not applicable to " + type.getId() + ".");
                     }
@@ -218,9 +236,9 @@ public class FlagArgumentParser {
 
                 case "setsitting", "sitting", "sit" -> {
                     if (watcher instanceof WolfWatcher ww) {
-                        ww.setSitting(nextBool(tokens, i, true));
+                        ww.setSitting(nextBool(tokens, i, toggle, ww.isSitting()));
                     } else if (watcher instanceof FoxWatcher fxw) {
-                        fxw.setSitting(nextBool(tokens, i, true));
+                        fxw.setSitting(nextBool(tokens, i, toggle, fxw.isSitting()));
                     } else {
                         warnings.add("'setSitting' is not applicable to " + type.getId() + ".");
                     }
@@ -228,7 +246,7 @@ public class FlagArgumentParser {
 
                 case "setangry", "angry", "anger" -> {
                     if (watcher instanceof WolfWatcher ww) {
-                        ww.setAngry(nextBool(tokens, i, true));
+                        ww.setAngry(nextBool(tokens, i, toggle, ww.isAngry()));
                     } else {
                         warnings.add("'setAngry' is not applicable to " + type.getId() + ".");
                     }
@@ -256,9 +274,9 @@ public class FlagArgumentParser {
 
                 case "setscreaming", "screaming", "scream", "angry_eyes" -> {
                     if (watcher instanceof EndermanWatcher ew) {
-                        ew.setScreaming(nextBool(tokens, i, true));
+                        ew.setScreaming(nextBool(tokens, i, toggle, ew.isScreaming()));
                     } else if (watcher instanceof GoatWatcher gw) {
-                        gw.setScreaming(nextBool(tokens, i, true));
+                        gw.setScreaming(nextBool(tokens, i, toggle, gw.isScreaming()));
                     } else {
                         warnings.add("'setScreaming' is not applicable to " + type.getId() + ".");
                     }
@@ -280,7 +298,7 @@ public class FlagArgumentParser {
 
                 case "setlefthorn", "lefthorn" -> {
                     if (watcher instanceof GoatWatcher gw) {
-                        gw.setHasLeftHorn(nextBool(tokens, i, true));
+                        gw.setHasLeftHorn(nextBool(tokens, i, toggle, gw.hasLeftHorn()));
                     } else {
                         warnings.add("'setLeftHorn' is not applicable to " + type.getId() + ".");
                     }
@@ -288,7 +306,7 @@ public class FlagArgumentParser {
 
                 case "setrighthorn", "righthorn" -> {
                     if (watcher instanceof GoatWatcher gw) {
-                        gw.setHasRightHorn(nextBool(tokens, i, true));
+                        gw.setHasRightHorn(nextBool(tokens, i, toggle, gw.hasRightHorn()));
                     } else {
                         warnings.add("'setRightHorn' is not applicable to " + type.getId() + ".");
                     }
@@ -308,7 +326,7 @@ public class FlagArgumentParser {
 
                 case "setstung", "stung" -> {
                     if (watcher instanceof BeeWatcher bw) {
-                        bw.setHasStung(nextBool(tokens, i, true));
+                        bw.setHasStung(nextBool(tokens, i, toggle, bw.isHasStung()));
                     } else {
                         warnings.add("'setStung' is not applicable to " + type.getId() + ".");
                     }
@@ -316,7 +334,7 @@ public class FlagArgumentParser {
 
                 case "setnectar", "nectar", "pollinating" -> {
                     if (watcher instanceof BeeWatcher bw) {
-                        bw.setHasNectar(nextBool(tokens, i, true));
+                        bw.setHasNectar(nextBool(tokens, i, toggle, bw.isHasNectar()));
                     } else {
                         warnings.add("'setNectar' is not applicable to " + type.getId() + ".");
                     }
@@ -326,7 +344,7 @@ public class FlagArgumentParser {
 
                 case "setshaking", "shaking" -> {
                     if (watcher instanceof StriderWatcher strw) {
-                        strw.setShaking(nextBool(tokens, i, true));
+                        strw.setShaking(nextBool(tokens, i, toggle, strw.isShaking()));
                     } else {
                         warnings.add("'setShaking' is not applicable to " + type.getId() + ".");
                     }
@@ -334,7 +352,7 @@ public class FlagArgumentParser {
 
                 case "setsaddled", "saddled", "saddle" -> {
                     if (watcher instanceof StriderWatcher strw) {
-                        strw.setSaddled(nextBool(tokens, i, true));
+                        strw.setSaddled(nextBool(tokens, i, toggle, strw.isSaddled()));
                     } else {
                         warnings.add("'setSaddled' is not applicable to " + type.getId() + ".");
                     }
@@ -344,7 +362,7 @@ public class FlagArgumentParser {
 
                 case "setdancing", "dancing" -> {
                     if (watcher instanceof PiglinWatcher piw) {
-                        piw.setDancing(nextBool(tokens, i, true));
+                        piw.setDancing(nextBool(tokens, i, toggle, piw.isDancing()));
                     } else {
                         warnings.add("'setDancing' is not applicable to " + type.getId() + ".");
                     }
@@ -352,7 +370,7 @@ public class FlagArgumentParser {
 
                 case "setcelebrating", "celebrating" -> {
                     if (watcher instanceof PiglinWatcher piw) {
-                        piw.setCelebrating(nextBool(tokens, i, true));
+                        piw.setCelebrating(nextBool(tokens, i, toggle, piw.isCelebrating()));
                     } else {
                         warnings.add("'setCelebrating' is not applicable to " + type.getId() + ".");
                     }
@@ -360,7 +378,7 @@ public class FlagArgumentParser {
 
                 case "setchargingcrossbow", "chargingcrossbow", "charging" -> {
                     if (watcher instanceof PiglinWatcher piw) {
-                        piw.setChargingCrossbow(nextBool(tokens, i, true));
+                        piw.setChargingCrossbow(nextBool(tokens, i, toggle, piw.isChargingCrossbow()));
                     } else {
                         warnings.add("'setChargingCrossbow' is not applicable to " + type.getId() + ".");
                     }
@@ -370,7 +388,7 @@ public class FlagArgumentParser {
 
                 case "setsmall", "small" -> {
                     if (watcher instanceof ArmorStandWatcher asw) {
-                        asw.setSmall(nextBool(tokens, i, true));
+                        asw.setSmall(nextBool(tokens, i, toggle, asw.isSmall()));
                     } else {
                         warnings.add("'setSmall' is not applicable to " + type.getId() + ".");
                     }
@@ -378,7 +396,7 @@ public class FlagArgumentParser {
 
                 case "setshowarms", "showarms", "arms" -> {
                     if (watcher instanceof ArmorStandWatcher asw) {
-                        asw.setShowArms(nextBool(tokens, i, true));
+                        asw.setShowArms(nextBool(tokens, i, toggle, asw.isShowArms()));
                     } else {
                         warnings.add("'setShowArms' is not applicable to " + type.getId() + ".");
                     }
@@ -386,7 +404,7 @@ public class FlagArgumentParser {
 
                 case "setnobaseplate", "nobaseplate", "hidebase" -> {
                     if (watcher instanceof ArmorStandWatcher asw) {
-                        asw.setNoBasePlate(nextBool(tokens, i, true));
+                        asw.setNoBasePlate(nextBool(tokens, i, toggle, asw.isNoBasePlate()));
                     } else {
                         warnings.add("'setNoBasePlate' is not applicable to " + type.getId() + ".");
                     }
@@ -442,7 +460,7 @@ public class FlagArgumentParser {
 
                 case "setlargefish", "largefish", "largefishvariant" -> {
                     if (watcher instanceof TropicalFishWatcher tfw) {
-                        tfw.setLarge(nextBool(tokens, i, true));
+                        tfw.setLarge(nextBool(tokens, i, toggle, tfw.isLargeVariant()));
                     } else {
                         warnings.add("'setLargeFish' is not applicable to " + type.getId() + ".");
                     }
@@ -476,7 +494,7 @@ public class FlagArgumentParser {
 
                 case "setsleeping", "sleeping", "sleep" -> {
                     if (watcher instanceof FoxWatcher fxw) {
-                        fxw.setSleeping(nextBool(tokens, i, true));
+                        fxw.setSleeping(nextBool(tokens, i, toggle, fxw.isSleeping()));
                     } else {
                         warnings.add("'setSleeping' is not applicable to " + type.getId() + ".");
                     }
@@ -484,7 +502,7 @@ public class FlagArgumentParser {
 
                 case "setinterested", "interested" -> {
                     if (watcher instanceof FoxWatcher fxw) {
-                        fxw.setInterested(nextBool(tokens, i, true));
+                        fxw.setInterested(nextBool(tokens, i, toggle, fxw.isInterested()));
                     } else {
                         warnings.add("'setInterested' is not applicable to " + type.getId() + ".");
                     }
@@ -492,7 +510,7 @@ public class FlagArgumentParser {
 
                 case "setcrouching_fox", "foxcrouch" -> {
                     if (watcher instanceof FoxWatcher fxw) {
-                        fxw.setCrouching(nextBool(tokens, i, true));
+                        fxw.setCrouching(nextBool(tokens, i, toggle, fxw.isCrouching()));
                     } else {
                         warnings.add("'foxCrouch' is not applicable to " + type.getId() + ".");
                     }
@@ -537,7 +555,7 @@ public class FlagArgumentParser {
 
                 case "setplayingdead", "playingdead", "playdead" -> {
                     if (watcher instanceof AxolotlWatcher axw) {
-                        axw.setPlayingDead(nextBool(tokens, i, true));
+                        axw.setPlayingDead(nextBool(tokens, i, toggle, axw.isPlayingDead()));
                     } else {
                         warnings.add("'setPlayingDead' is not applicable to " + type.getId() + ".");
                     }
@@ -569,7 +587,7 @@ public class FlagArgumentParser {
 
                 case "sethorsetamed", "horsetamed" -> {
                     if (watcher instanceof HorseWatcher hw) {
-                        hw.setTame(nextBool(tokens, i, true));
+                        hw.setTame(nextBool(tokens, i, toggle, hw.isTame()));
                     } else {
                         warnings.add("'setHorseTamed' is not applicable to " + type.getId() + ".");
                     }
@@ -579,7 +597,7 @@ public class FlagArgumentParser {
 
                 case "setchest", "chest", "haschest" -> {
                     if (watcher instanceof LlamaWatcher lw) {
-                        lw.setHasChest(nextBool(tokens, i, true));
+                        lw.setHasChest(nextBool(tokens, i, toggle, lw.hasChest()));
                     } else {
                         warnings.add("'setChest' is not applicable to " + type.getId() + ".");
                     }
@@ -636,7 +654,7 @@ public class FlagArgumentParser {
 
                 case "setcattamed", "cattamed" -> {
                     if (watcher instanceof CatWatcher catw) {
-                        catw.setTame(nextBool(tokens, i, true));
+                        catw.setTame(nextBool(tokens, i, toggle, catw.isTame()));
                     } else {
                         warnings.add("'setCatTamed' is not applicable to " + type.getId() + ".");
                     }
@@ -644,7 +662,7 @@ public class FlagArgumentParser {
 
                 case "setcatsitting", "catsitting" -> {
                     if (watcher instanceof CatWatcher catw) {
-                        catw.setSitting(nextBool(tokens, i, true));
+                        catw.setSitting(nextBool(tokens, i, toggle, catw.isSitting()));
                     } else {
                         warnings.add("'setCatSitting' is not applicable to " + type.getId() + ".");
                     }
@@ -652,7 +670,7 @@ public class FlagArgumentParser {
 
                 case "setlying", "lying", "liedown" -> {
                     if (watcher instanceof CatWatcher catw) {
-                        catw.setLying(nextBool(tokens, i, true));
+                        catw.setLying(nextBool(tokens, i, toggle, catw.isLying()));
                     } else {
                         warnings.add("'setLying' is not applicable to " + type.getId() + ".");
                     }
@@ -660,7 +678,7 @@ public class FlagArgumentParser {
 
                 case "setrelaxed", "relaxed", "relax" -> {
                     if (watcher instanceof CatWatcher catw) {
-                        catw.setRelaxed(nextBool(tokens, i, true));
+                        catw.setRelaxed(nextBool(tokens, i, toggle, catw.isRelaxed()));
                     } else {
                         warnings.add("'setRelaxed' is not applicable to " + type.getId() + ".");
                     }
@@ -753,7 +771,7 @@ public class FlagArgumentParser {
 
                 case "setconverting", "converting" -> {
                     if (watcher instanceof ZombieVillagerWatcher zvw) {
-                        zvw.setConverting(nextBool(tokens, i, true));
+                        zvw.setConverting(nextBool(tokens, i, toggle, zvw.isConverting()));
                     } else {
                         warnings.add("'setConverting' is not applicable to " + type.getId() + ".");
                     }
@@ -1104,6 +1122,15 @@ public class FlagArgumentParser {
      * {@code defaultValue} WITHOUT advancing the index.
      * This prevents consuming the next flag name as a value.
      */
+    /**
+     * Boolean flag value with context-dependent bare-flag default: in toggle mode
+     * (modify) a bare flag flips {@code current}; otherwise it sets TRUE.  An
+     * explicit true/false token wins in both modes.
+     */
+    private static boolean nextBool(String[] tokens, int[] i, boolean toggle, boolean current) {
+        return nextBool(tokens, i, toggle ? !current : true);
+    }
+
     private static boolean nextBool(String[] tokens, int[] i, boolean defaultValue) {
         if (i[0] >= tokens.length) return defaultValue;
         return switch (tokens[i[0]].toLowerCase()) {

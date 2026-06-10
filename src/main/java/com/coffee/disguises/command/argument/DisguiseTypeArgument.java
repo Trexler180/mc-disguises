@@ -109,11 +109,19 @@ public final class DisguiseTypeArgument {
 
         // Resolve type from context. For command paths that don't carry a "type"
         // argument (e.g. /disguise player <name> <flags> or /disguise as <skin> <flags>)
-        // the disguise is always a PLAYER, so fall back to that.
+        // the disguise is always a PLAYER, so fall back to that — unless the source
+        // is already disguised (/disguise modify), in which case the active
+        // disguise's type gives the correct flag list.
         DisguiseType type = DisguiseType.PLAYER;
         try {
             type = get(ctx, "type");
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+            try {
+                var disguise = com.coffee.disguises.core.DisguiseManager.INSTANCE
+                        .getDisguise(ctx.getSource().getPlayerOrException());
+                if (disguise != null) type = disguise.getType();
+            } catch (Exception ignored2) {}
+        }
 
         return suggestFlagsFor(type, builder);
     }
@@ -126,6 +134,53 @@ public final class DisguiseTypeArgument {
     public static CompletableFuture<Suggestions> suggestPlayerFlags(
             CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
         return suggestFlagsFor(DisguiseType.PLAYER, builder);
+    }
+
+    /**
+     * Suggestions for a greedy argument holding a whole disguise string:
+     * {@code <type> [flags...]} (the format stored by /savedisguise presets).
+     *
+     * While the first token is being typed, suggests disguise type IDs (plus
+     * "player", the player-skin form).  Once a valid type is complete, falls
+     * through to the usual context-aware flag suggestions for that type.
+     *
+     * Wire to the greedy argument: .suggests(DisguiseTypeArgument::suggestTypeThenFlags)
+     */
+    public static CompletableFuture<Suggestions> suggestTypeThenFlags(
+            CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+
+        String soFar = builder.getRemaining();
+        int firstSpace = soFar.indexOf(' ');
+
+        if (firstSpace < 0) {
+            // Still typing the first token: suggest type IDs.
+            List<String> ids = Arrays.stream(DisguiseType.values())
+                    .map(DisguiseType::getId)
+                    .collect(Collectors.toList());
+            ids.add("player");
+            return SharedSuggestionProvider.suggest(ids, builder);
+        }
+
+        String first = soFar.substring(0, firstSpace).toLowerCase();
+        boolean playerForm = first.equals("player") || first.equals("as");
+        DisguiseType type = playerForm
+                ? DisguiseType.PLAYER
+                : DisguiseType.fromId(first).orElse(null);
+        if (type == null) return builder.buildFuture();
+
+        // "player <skinName> [flags]" — the token right after "player" is a
+        // skin name, not a flag; only suggest once the name is complete.
+        String rest = soFar.substring(firstSpace + 1);
+        if (playerForm && !rest.contains(" ")) {
+            return builder.buildFuture();
+        }
+
+        List<String> candidates = FlagArgumentParser.suggest(rest, type);
+        if (candidates.isEmpty()) return builder.buildFuture();
+
+        int offsetFromStart = computeTokenStart(soFar);
+        SuggestionsBuilder offsetBuilder = builder.createOffset(builder.getStart() + offsetFromStart);
+        return SharedSuggestionProvider.suggest(candidates, offsetBuilder);
     }
 
     private static CompletableFuture<Suggestions> suggestFlagsFor(

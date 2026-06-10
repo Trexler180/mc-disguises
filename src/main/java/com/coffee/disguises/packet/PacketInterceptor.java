@@ -1064,6 +1064,26 @@ public class PacketInterceptor {
         // already sent the live PlayerInfoRemove for every online observer.
     }
 
+    /**
+     * Whether a serverbound attack on {@code target} should be silently swallowed
+     * instead of reaching vanilla's handler.
+     *
+     * Vanilla kicks the attacker ("multiplayer.disconnect.invalid_entity_attacked")
+     * when the target is an item entity, experience orb, or non-attackable arrow —
+     * under the assumption that a legitimate client never aims at those.  A disguise
+     * breaks that assumption: an item disguised as a zombie looks perfectly
+     * attackable, so the observer's client happily swings at it and gets kicked.
+     *
+     * All of vanilla's kick-triggering types report {@code isAttackable() == false},
+     * so that single check covers them without referencing version-specific classes
+     * (AbstractArrow moved packages between the supported MC versions).
+     */
+    public static boolean shouldSwallowAttack(Entity target) {
+        if (target == null) return false;
+        if (DisguiseManager.INSTANCE.getDisguise(target) == null) return false;
+        return !target.isAttackable();
+    }
+
     /** Removes all server-side state tied to a specific observer (called on observer disconnect). */
     public static void cleanupForRemovedObserver(UUID observerUUID) {
         injectedTabEntries.remove(observerUUID);

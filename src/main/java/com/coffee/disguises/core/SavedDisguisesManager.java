@@ -26,11 +26,16 @@ import java.util.*;
  */
 public class SavedDisguisesManager {
 
-    public static final SavedDisguisesManager INSTANCE = new SavedDisguisesManager();
-
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path SAVE_PATH =
             FabricLoader.getInstance().getConfigDir().resolve("disguises-saved.json");
+
+    // INSTANCE must be declared AFTER the fields above: static initializers run
+    // in textual order and the constructor calls load(), which reads SAVE_PATH.
+    // Declaring INSTANCE first left SAVE_PATH null during construction, throwing
+    // ExceptionInInitializerError out of the first /savedisguise command and
+    // bricking the class (NoClassDefFoundError) for the rest of the session.
+    public static final SavedDisguisesManager INSTANCE = new SavedDisguisesManager();
 
     // uuid → (presetName → "type [flags]")
     private final Map<UUID, Map<String, String>> data = new LinkedHashMap<>();
@@ -76,25 +81,31 @@ public class SavedDisguisesManager {
         }
         try (Writer w = Files.newBufferedWriter(SAVE_PATH)) {
             GSON.toJson(jsonMap, w);
-        } catch (IOException e) {
+        } catch (Exception e) {
             DisguisesMod.LOGGER.error("Failed to save disguise presets", e);
         }
     }
 
+    /**
+     * Never lets an exception escape: a corrupt/unreadable presets file must not
+     * take the command (or the server) down with it — presets just start empty.
+     */
     private void load() {
-        if (!Files.exists(SAVE_PATH)) return;
-        try (Reader r = Files.newBufferedReader(SAVE_PATH)) {
-            Type type = new TypeToken<Map<String, Map<String, String>>>() {}.getType();
-            Map<String, Map<String, String>> jsonMap = GSON.fromJson(r, type);
-            if (jsonMap != null) {
-                for (Map.Entry<String, Map<String, String>> e : jsonMap.entrySet()) {
-                    try {
-                        UUID uuid = UUID.fromString(e.getKey());
-                        data.put(uuid, new LinkedHashMap<>(e.getValue()));
-                    } catch (IllegalArgumentException ignored) {}
+        try {
+            if (!Files.exists(SAVE_PATH)) return;
+            try (Reader r = Files.newBufferedReader(SAVE_PATH)) {
+                Type type = new TypeToken<Map<String, Map<String, String>>>() {}.getType();
+                Map<String, Map<String, String>> jsonMap = GSON.fromJson(r, type);
+                if (jsonMap != null) {
+                    for (Map.Entry<String, Map<String, String>> e : jsonMap.entrySet()) {
+                        try {
+                            UUID uuid = UUID.fromString(e.getKey());
+                            data.put(uuid, new LinkedHashMap<>(e.getValue()));
+                        } catch (IllegalArgumentException ignored) {}
+                    }
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             DisguisesMod.LOGGER.error("Failed to load disguise presets", e);
         }
     }

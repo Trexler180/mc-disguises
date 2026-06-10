@@ -12,7 +12,8 @@
     "MobSoundMixin",
     "ChunkMapAccessor",
     "TrackedEntityAccessor",
-    "GameModeChangeMixin"
+    "GameModeChangeMixin",
+    "AttackKickMixin"
   ],
   "client": [],
   "injectors": {

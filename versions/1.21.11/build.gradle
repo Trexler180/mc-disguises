@@ -60,6 +60,7 @@ sourceSets {
 		java.srcDirs = ["${repoRoot}/src/main/java"]
 		java.exclude("com/coffee/disguises/disguise/SoundCompat.java")
 		java.exclude("com/coffee/disguises/compat/EntityTagCompat.java")
+		java.exclude("com/coffee/disguises/mixin/AttackKickMixin.java")
 		resources.srcDirs = ["${repoRoot}/src/main/resources"]
 	}
 	client {

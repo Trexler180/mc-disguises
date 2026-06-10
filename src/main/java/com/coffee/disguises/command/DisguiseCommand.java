@@ -616,11 +616,48 @@ public class DisguiseCommand {
             return 0;
         }
 
+        // Extract the special tokens (selfview/showname/hidename) like parseFlags
+        // does at disguise time, but tri-state: null = not mentioned, keep current.
+        Boolean selfView = null;
+        Boolean showName = null;
+        StringBuilder remaining = new StringBuilder();
+        if (flagString != null && !flagString.isBlank()) {
+            for (String token : flagString.trim().split("\\s+")) {
+                switch (token.toLowerCase()) {
+                    case "selfview", "self_view"           -> selfView = true;
+                    case "notselfview", "noselfview",
+                         "no_self_view"                    -> selfView = false;
+                    case "showname", "show_name"           -> showName = true;
+                    case "hidename", "hide_name"           -> showName = false;
+                    default -> {
+                        if (!remaining.isEmpty()) remaining.append(' ');
+                        remaining.append(token);
+                    }
+                }
+            }
+        }
+
+        // toggle = true: a bare boolean flag (setFire, setGlowing, …) flips the
+        // current value instead of always setting true; explicit true/false still sets.
         List<String> warnings = FlagArgumentParser.apply(
-                existing.getWatcher(), existing.getType(), flagString);
+                existing.getWatcher(), existing.getType(), remaining.toString(), true);
         sendWarnings(source, warnings);
 
-        // Re-apply to push the updated metadata to nearby players
+        if (showName != null) {
+            existing.setShowName(showName);
+        }
+        if (selfView != null && selfView != existing.isSelfDisguise()) {
+            existing.setSelfDisguise(selfView);
+            DisguiseManager.INSTANCE.setSelfViewPref(player.getUUID(), selfView);
+            if (!selfView) {
+                PacketInterceptor.removeSelfView(player);
+            }
+            // selfView=true is handled by applyDisguise below, which re-applies
+            // the self-view puppet when isSelfDisguise() is set.
+        }
+
+        // Re-apply to push the updated metadata (and nametag-hide team state)
+        // to nearby players.
         DisguiseManager.INSTANCE.applyDisguise(player, existing);
 
         source.sendSuccess(() -> Component.literal("§aDisguise modified."), false);
