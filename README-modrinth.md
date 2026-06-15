@@ -1,20 +1,14 @@
 # Disguises
 
-**Turn any player or mob into virtually anything — 100% server-side, no client mods required.**
+A powerful, server-side Fabric disguise mod inspired by **LibsDisguises**. Disguise players or any entity as virtually any mob, animal, player, block display, item, vehicle, or projectile, with fine-grained per-entity customisation, equipment overrides, self-view support, and a fully configurable permission system.
 
-A powerful Fabric disguise mod inspired by **LibsDisguises**. Disguise players, mobs, or any entity as 100+ types — animals, players, blocks, items, vehicles, projectiles — with deep per-entity customisation, self-view, sounds, and a fully configurable permission system.
+Everything runs on the server, so your players just join with vanilla Fabric and it works. There is no client mod or resource pack to install.
 
-- ✅ **Server-side only** — install on the server, players join with vanilla Fabric and just work
-- ✅ **100+ entity types** — animals, hostile mobs, players (real skins), block displays, items, all boats & minecarts, projectiles
-- ✅ **Deep customisation** — colors, age, poses, equipment, tameness, professions, and dozens more flags, all with tab-completion
-- ✅ **Self-view** — let players see their own disguise as a live third-person puppet
-- ✅ **Per-observer disguises** — show one player a different disguise than everyone else
-- ✅ **Vanish-aware** + sound replacement + saved presets + persistence across restarts
-- ✅ **Fully configurable** — per-command op levels, per-type permissions, and toggles for nearly every behavior
+Over 100 entity types are supported, from passive animals and hostile mobs to other players (with their real skins), block displays, items, every boat and minecart variant, and projectiles. Each type takes its own flags for things like colour, age, pose, equipment, tameness and professions, all with full tab-completion.
 
-**Requires:** Fabric Loader + Fabric API · Minecraft **26.1.2** (alternate **1.21.11** build available)
+For build instructions and source, see the [GitHub repository](https://github.com/Trexler180/mc-disguises#readme).
 
-> 📖 Full docs, build instructions, and contributor info: **[GitHub repository](https://github.com/Trexler180/mc-disguises#readme)**
+**Requires** Fabric Loader and Fabric API. The main build targets Minecraft 26.1.2, and an alternate 1.21.11 build is available.
 
 ---
 
@@ -142,7 +136,3 @@ Full tab-completion for all flags and their values is supported.
 
 ## Inspired by
 [LibsDisguises](https://www.spigotmc.org/resources/libs-disguises.81/), the gold standard for Bukkit/Spigot disguise plugins, reimagined for Fabric.
-
----
-
-*Developers & contributors: see the [GitHub README](https://github.com/Trexler180/mc-disguises#readme) for build instructions, alternate-version builds, and source.*
