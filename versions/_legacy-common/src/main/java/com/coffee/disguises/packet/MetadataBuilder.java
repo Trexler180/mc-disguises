@@ -36,7 +36,7 @@ import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.Shulker;
-import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.monster.Strider;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.monster.piglin.Piglin;
@@ -688,7 +688,7 @@ public class MetadataBuilder {
         logResolution("ArmorStand leftLegPose", F_ARMOR_STAND_LEFT_LEG_POSE);
         logResolution("ArmorStand rightLegPose",F_ARMOR_STAND_RIGHT_LEG_POSE);
 
-        // Resolve minecart fields now, using EntityTypes.MINECART to get the right class.
+        // Resolve minecart fields now, using EntityType.MINECART to get the right class.
         initMinecartFields();
 
         initialized = true;
@@ -696,7 +696,7 @@ public class MetadataBuilder {
 
     /**
      * Resolves minecart display-block DataTracker fields.
-     * Gets the entity class directly from EntityTypes.MINECART (no live entity needed),
+     * Gets the entity class directly from EntityType.MINECART (no live entity needed),
      * then uses NAME-ONLY resolution — never index scan.
      *
      * Index scan is intentionally disabled here because indices 11–13 exist on
@@ -706,7 +706,7 @@ public class MetadataBuilder {
     private static synchronized void initMinecartFields() {
         if (minecartInitialized) return;
 
-        // Get the entity class from EntityTypes.MINECART via reflection.
+        // Get the entity class from EntityType.MINECART via reflection.
         // EntityType stores its entity factory; we create a temporary instance
         // using a null level just to get the concrete class — we only need the class
         // object itself, not a functioning entity.
@@ -716,18 +716,18 @@ public class MetadataBuilder {
             // We only need the class object; the entity is discarded immediately.
             // Wrapped in try/catch in case null-level causes an NPE inside the factory.
             net.minecraft.world.entity.Entity tmp =
-                    net.minecraft.world.entity.EntityTypes.MINECART.create(
+                    net.minecraft.world.entity.EntityType.MINECART.create(
                             (net.minecraft.world.level.Level) null,
                             net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             if (tmp != null) {
                 minecartEntityClass = tmp.getClass();
                 com.coffee.disguises.DisguisesMod.LOGGER.debug(
-                        "[MetadataBuilder] Got minecart class '{}' from EntityTypes.MINECART.create()",
+                        "[MetadataBuilder] Got minecart class '{}' from EntityType.MINECART.create()",
                         minecartEntityClass.getName());
             }
         } catch (Exception e) {
             com.coffee.disguises.DisguisesMod.LOGGER.debug(
-                    "[MetadataBuilder] EntityTypes.MINECART.create(null, COMMAND) threw {}: {} — trying class name fallback",
+                    "[MetadataBuilder] EntityType.MINECART.create(null, COMMAND) threw {}: {} — trying class name fallback",
                     e.getClass().getSimpleName(), e.getMessage());
         }
 

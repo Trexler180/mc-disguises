@@ -7,12 +7,12 @@ def repoRoot = file("../..")
 def rootProperties = new Properties()
 file("${repoRoot}/gradle.properties").withInputStream { rootProperties.load(it) }
 
-def minecraftVersion = "1.21.11"
+def minecraftVersion = "26.1.2"
 def loaderVersion = "0.19.2"
-def fabricVersion = "0.141.4+1.21.11"
-def clothConfigVersion = "21.11.153"
-def modmenuVersion = "17.0.0"
-def javaRelease = 21
+def fabricVersion = "0.146.1+26.1.2"
+def clothConfigVersion = "26.1.154"
+def modmenuVersion = "18.0.0-alpha.8"
+def javaRelease = 25
 
 version = rootProperties.getProperty("mod_version")
 group = rootProperties.getProperty("maven_group")
@@ -58,10 +58,8 @@ loom {
 sourceSets {
 	main {
 		java.srcDirs = ["${repoRoot}/src/main/java"]
-		java.exclude("com/coffee/disguises/disguise/SoundCompat.java")
-		java.exclude("com/coffee/disguises/compat/EntityTagCompat.java")
-		java.exclude("com/coffee/disguises/mixin/AttackKickMixin.java")
-		// These files use the 26.2 API; pull old-API copies from versions/_legacy-common.
+		// These files use the 26.2 API (EntityTypes.*, monster.cubemob.Slime).
+		// The legacy build supplies its own old-API copies from versions/_legacy-common.
 		java.exclude("com/coffee/disguises/disguise/DisguiseType.java")
 		java.exclude("com/coffee/disguises/packet/MetadataBuilder.java")
 		java.exclude("com/coffee/disguises/packet/PacketInterceptor.java")
@@ -72,9 +70,16 @@ sourceSets {
 	}
 }
 
+tasks.named("compileJava", JavaCompile) {
+	source(fileTree("${repoRoot}/versions/_legacy-common/src/main/java"))
+}
+
 dependencies {
 	minecraft "com.mojang:minecraft:${minecraftVersion}"
-	mappings loom.officialMojangMappings()
+	// 26.1.2 official Mojang mappings are not published for download, so this build
+	// consumes the committed merged tiny mappings instead. Loom expects a jar that
+	// contains mappings/mappings.tiny (mappings.jar is packed from the repo-root tiny).
+	mappings files("mappings.jar")
 	modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricVersion}"
 
@@ -115,13 +120,8 @@ tasks.withType(JavaCompile).configureEach {
 	it.options.release = javaRelease
 }
 
-tasks.named("compileJava", JavaCompile) {
-	source(fileTree("src/main/java"))
-	source(fileTree("${repoRoot}/versions/_legacy-common/src/main/java"))
-}
-
 tasks.withType(AbstractArchiveTask).configureEach {
-	archiveClassifier = "mc1.21.11"
+	archiveClassifier = "mc26.1.2"
 }
 
 java {

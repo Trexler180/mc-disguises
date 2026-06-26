@@ -100,11 +100,24 @@ java {
 	targetCompatibility = JavaVersion.toVersion(javaRelease)
 }
 
+tasks.register("buildMc2612", Exec) {
+	group = "build"
+	description = "Builds the alternate Minecraft 26.1.2 jar without changing the main target."
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		commandLine "cmd", "/c", "gradlew.bat", "-p", "versions/26.1.2", "build"
+	} else {
+		commandLine "./gradlew", "-p", "versions/26.1.2", "build"
+	}
+}
+
 tasks.register("buildMc12111", Exec) {
 	group = "build"
 	description = "Builds the alternate Minecraft 1.21.11 jar without changing the main target."
-	def gradlew = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "gradlew.bat" : "./gradlew"
-	commandLine gradlew, "-p", "versions/1.21.11", "build"
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		commandLine "cmd", "/c", "gradlew.bat", "-p", "versions/1.21.11", "build"
+	} else {
+		commandLine "./gradlew", "-p", "versions/1.21.11", "build"
+	}
 }
 
 jar {
