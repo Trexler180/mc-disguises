@@ -122,20 +122,30 @@ Full tab-completion for all flags and their values is supported.
 
 - **Fabric Loader**
 - **Fabric API**
-- Main build: Minecraft 26.1.2
-- Alternate build: Minecraft 1.21.11
+- Main build: Minecraft 26.2
+- Alternate builds: Minecraft 26.1.2 and 1.21.11
 
 ## Alternate Builds
 
-The main build targets the current Minecraft version from `gradle.properties`.
+The main build targets the current Minecraft version from `gradle.properties` (26.2).
 
-To build the non-main Minecraft 1.21.11 jar:
+To build the legacy Minecraft 26.1.2 jar:
+
+```bash
+./gradlew buildMc2612
+```
+
+That produces a separate `mc26.1.2` classified jar in `versions/26.1.2/build/libs`.
+
+To build the legacy Minecraft 1.21.11 jar:
 
 ```bash
 ./gradlew buildMc12111
 ```
 
-That produces a separate `mc1.21.11` classified jar in `versions/1.21.11/build/libs` and leaves the main target unchanged.
+That produces a separate `mc1.21.11` classified jar in `versions/1.21.11/build/libs`.
+
+Both alternate builds leave the main target unchanged.
 
 ---
 
