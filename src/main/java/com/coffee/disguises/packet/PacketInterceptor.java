@@ -35,7 +35,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *
  * ─── PLAYER DISGUISES ─────────────────────────────────────────────────────────
  * 1. ClientboundPlayerInfoUpdatePacket  (ADD_PLAYER + UPDATE_LISTED)
- * 2. ClientboundAddEntityPacket          (EntityType.PLAYER)
+ * 2. ClientboundAddEntityPacket          (EntityTypes.PLAYER)
  * 3. ClientboundSetEntityDataPacket      (metadata / skin flags)
  * 4. ClientboundSetEquipmentPacket
  * 5. [delayed] ClientboundPlayerInfoRemovePacket
@@ -300,14 +300,16 @@ public class PacketInterceptor {
                     ? pd.getSkinProfile()
                     : buildDefaultProfile(pd.getDisguiseName());
             tabUUID = UUID.randomUUID();
-            GameProfile fakeProfile = buildSkinProfile(tabUUID, skinSource);
+            // Honour setCustomName for self-view too (see buildSkinProfile docs).
+            GameProfile fakeProfile = buildSkinProfile(tabUUID, skinSource,
+                    pd.getWatcher().getCustomName());
 
             player.connection.send(buildRawPlayerInfoPacket(fakeProfile, false));
             player.connection.send(new ClientboundAddEntityPacket(
                     puppetId, tabUUID,
                     player.getX(), player.getY(), player.getZ(),
                     player.getXRot(), player.getYRot(),
-                    net.minecraft.world.entity.EntityType.PLAYER,
+                    net.minecraft.world.entity.EntityTypes.PLAYER,
                     0, vel, player.getYHeadRot()
             ));
             sendMetadataPacketToId(player, puppetId, disguise);
@@ -721,7 +723,10 @@ public class PacketInterceptor {
         // Always use a randomly-generated UUID for the fake tab entry to avoid
         // collisions when the observer IS the impersonated player.
         UUID fakeUUID = UUID.randomUUID();
-        GameProfile fakeProfile = buildSkinProfile(fakeUUID, skinSource);
+        // A custom name (setCustomName) overrides the displayed name: for a PLAYER
+        // disguise the nametag comes from the profile name, not the metadata field.
+        GameProfile fakeProfile = buildSkinProfile(fakeUUID, skinSource,
+                pd.getWatcher().getCustomName());
 
         Vec3 vel = entity.getDeltaMovement();
 
@@ -743,7 +748,7 @@ public class PacketInterceptor {
                 entity.getId(), fakeUUID,
                 entity.getX(), entity.getY(), entity.getZ(),
                 entity.getXRot(), entity.getYRot(),
-                net.minecraft.world.entity.EntityType.PLAYER,
+                net.minecraft.world.entity.EntityTypes.PLAYER,
                 0, vel, entity.getYHeadRot()
         ));
 
@@ -1095,9 +1100,41 @@ public class PacketInterceptor {
     }
 
     private static GameProfile buildSkinProfile(UUID fakeUUID, GameProfile skinSource) {
+        return buildSkinProfile(fakeUUID, skinSource, null);
+    }
+
+    /**
+     * Builds the fake GameProfile used to spawn a player-disguise entity, copying the
+     * skin/cape Properties from {@code skinSource} but optionally overriding the name.
+     *
+     * The name override is how {@code setCustomName} takes effect on a PLAYER-type
+     * disguise: the floating nametag above a RemotePlayer is rendered by the client
+     * from the GameProfile name (decorated by scoreboard team), NOT from the
+     * DATA_CUSTOM_NAME metadata index — so setting that metadata field has no visible
+     * effect.  Routing the custom name through the profile name here is the only way
+     * to change the displayed name.  The skin is unaffected: it loads from the copied
+     * "textures" property, independent of the name.
+     *
+     * @param nameOverride the custom name to display, or null to keep the skin source's name
+     */
+    private static GameProfile buildSkinProfile(UUID fakeUUID, GameProfile skinSource,
+                                                String nameOverride) {
         com.mojang.authlib.properties.PropertyMap props = new com.mojang.authlib.properties.PropertyMap(
                 com.google.common.collect.LinkedHashMultimap.create(skinSource.properties()));
-        return new GameProfile(fakeUUID, skinSource.name(), props);
+        return new GameProfile(fakeUUID, resolveProfileName(nameOverride, skinSource.name()), props);
+    }
+
+    /**
+     * Resolves the name to put on a player-disguise GameProfile.
+     *
+     * Returns {@code fallback} when no custom name is set.  Otherwise returns the
+     * custom name truncated to 16 characters: the client decodes player profile names
+     * with {@code FriendlyByteBuf.readUtf(16)} and disconnects on anything longer, so
+     * an over-length custom name would kick every observer.
+     */
+    private static String resolveProfileName(String customName, String fallback) {
+        if (customName == null || customName.isEmpty()) return fallback;
+        return customName.length() > 16 ? customName.substring(0, 16) : customName;
     }
 
     // =========================================================================
