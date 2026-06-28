@@ -2,7 +2,7 @@
 
 A powerful, server-side Fabric disguise mod inspired by **LibsDisguises**. Disguise players or any entity as virtually any mob, animal, player, block display, item, vehicle, or projectile, with fine-grained per-entity customisation, equipment overrides, self-view support, and a fully configurable permission system.
 
-Everything runs on the server, so your players just join with vanilla Fabric and it works. There is no client mod or resource pack to install.
+Everything runs on the server, so your players just join and it works. There is no client mod or resource pack to install.
 
 Over 100 entity types are supported, from passive animals and hostile mobs to other players (with their real skins), block displays, items, every boat and minecart variant, and projectiles. Each type takes its own flags for things like colour, age, pose, equipment, tameness and professions, all with full tab-completion.
 
