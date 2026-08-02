@@ -4,16 +4,17 @@
   "package": "com.coffee.disguises.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ServerEntityMixin",
-    "EntityRemoveMixin",
+    "AttackKickMixin",
+    "ChunkMapAccessor",
     "EntityDataUpdateMixin",
+    "EntityRemoveMixin",
+    "GameModeChangeMixin",
     "LivingEntitySoundMixin",
     "LivingEntitySwingMixin",
     "MobSoundMixin",
-    "ChunkMapAccessor",
-    "TrackedEntityAccessor",
-    "GameModeChangeMixin",
-    "AttackKickMixin"
+    "PlayerMixin",
+    "ServerEntityMixin",
+    "TrackedEntityAccessor"
   ],
   "client": [],
   "injectors": {
