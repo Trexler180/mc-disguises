@@ -34,10 +34,10 @@ repositories {
 		}
 	}
 	maven {
-		name = "TerraformersMC"
-		url = 'https://maven.terraformersmc.com/releases/'
+		name = "Modrinth"
+		url = 'https://api.modrinth.com/maven'
 		content {
-			includeGroup "com.terraformersmc"
+			includeGroup "maven.modrinth"
 		}
 	}
 	maven {
@@ -93,8 +93,8 @@ dependencies {
 	}
 
 	// ModMenu (optional)
-	modCompileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
-	modRuntimeOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+	modCompileOnly "maven.modrinth:modmenu:${modmenuVersion}"
+	modRuntimeOnly "maven.modrinth:modmenu:${modmenuVersion}"
 }
 
 processResources {

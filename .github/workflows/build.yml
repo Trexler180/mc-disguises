@@ -37,13 +37,31 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: build (minecraft 26.2)
-        run: ./gradlew build
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew build && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "::warning::Gradle build failed on attempt $attempt; retrying in 15 seconds"
+            sleep 15
+          done
 
       - name: build (minecraft 1.21.11)
-        run: ./gradlew -p versions/1.21.11 build
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew -p versions/1.21.11 build && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "::warning::Gradle build failed on attempt $attempt; retrying in 15 seconds"
+            sleep 15
+          done
 
       - name: build (minecraft 26.1.2)
-        run: ./gradlew -p versions/26.1.2 build
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew -p versions/26.1.2 build && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "::warning::Gradle build failed on attempt $attempt; retrying in 15 seconds"
+            sleep 15
+          done
 
       - name: capture build artifacts
         uses: actions/upload-artifact@v4

@@ -27,10 +27,10 @@ repositories {
 		}
 	}
 	maven {
-		name = "TerraformersMC"
-		url = 'https://maven.terraformersmc.com/releases/'
+		name = "Modrinth"
+		url = 'https://api.modrinth.com/maven'
 		content {
-			includeGroup "com.terraformersmc"
+			includeGroup "maven.modrinth"
 		}
 	}
 	maven {
@@ -67,8 +67,8 @@ dependencies {
 	}
 
 	// ModMenu (optional)
-	compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
-	runtimeOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+	compileOnly "maven.modrinth:modmenu:${project.modmenu_version}"
+	runtimeOnly "maven.modrinth:modmenu:${project.modmenu_version}"
 
 	testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"

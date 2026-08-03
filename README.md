@@ -25,6 +25,12 @@ Observer-specific disguises and vanish providers are supported, including a buil
 ### Sound replacement
 Ambient, hurt, death, and footstep sounds are automatically replaced with the disguise type's sounds.
 
+### Disguise names in messages
+Server owners can optionally show disguise names in signed chat decoration and
+player-facing system messages such as deaths and advancements. Real account
+identities remain intact for UUIDs, profiles, commands, permissions, logs, and
+signed-chat reporting, with an optional real-name hover tooltip.
+
 ### Extensive entity customisation
 Every disguise type supports entity-specific flags set inline with the disguise command:
 
@@ -83,7 +89,7 @@ Full tab-completion for all flags and their values is supported.
 | `/disguises info [player]` | Show active disguise info |
 | `/disguises list` | List all currently disguised entities |
 | `/disguises clearcache` | Clear the player-skin cache |
-| `/disguises names` | Show chat/death disguise-name settings |
+| `/disguises names` | Show chat/system disguise-name settings |
 | `/disguises names <chat\|system\|hover> <on\|off>` | Change and persist a disguise-name setting (`death` remains an alias for `system`) |
 | `/disguises observer <target> <viewer> <type> [flags]` | Set a per-observer disguise override |
 | `/disguises removeobserver <target> <viewer>` | Remove one per-observer disguise override |
@@ -117,8 +123,10 @@ Full tab-completion for all flags and their values is supported.
 | `persistDisguises` | `false` | Save and restore disguises across server restarts |
 | `showEquipmentThroughDisguise` | `false` | Show the real entity's equipment through the disguise |
 | `enforceTypePermissions` | `false` | Require `disguises.type.<type>` permission per entity type |
+| `maxSavedPresetsPerPlayer` | `50` | Maximum saved presets per player (`0` = unlimited) |
 | `permLevelSelf/Others/Entity/Radius` | `2` | Op levels for each command category |
 | `permLevelAdmin` | `3` | Op level for `/disguises` admin commands |
+| `permLevelType` | `4` | Fallback op level for per-type permissions without a permissions mod |
 | `disabledEntityTypes` | `[]` | Block specific entity types from being used |
 
 ---
