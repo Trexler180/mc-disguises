@@ -13,12 +13,14 @@ def fabricVersion = "0.146.1+26.1.2"
 def clothConfigVersion = "26.1.154"
 def modmenuVersion = "18.0.0-alpha.8"
 def javaRelease = 25
+def archiveBaseName = rootProperties.getProperty("archives_base_name")
+def resourceVersion = rootProperties.getProperty("mod_version")
 
-version = rootProperties.getProperty("mod_version")
+version = resourceVersion
 group = rootProperties.getProperty("maven_group")
 
 base {
-	archivesName = rootProperties.getProperty("archives_base_name")
+	archivesName = archiveBaseName
 }
 
 repositories {
@@ -58,11 +60,6 @@ loom {
 sourceSets {
 	main {
 		java.srcDirs = ["${repoRoot}/src/main/java"]
-		// These files use the 26.2 API (EntityTypes.*, monster.cubemob.Slime).
-		// The legacy build supplies its own old-API copies from versions/_legacy-common.
-		java.exclude("com/coffee/disguises/disguise/DisguiseType.java")
-		java.exclude("com/coffee/disguises/packet/MetadataBuilder.java")
-		java.exclude("com/coffee/disguises/packet/PacketInterceptor.java")
 		resources.srcDirs = ["${repoRoot}/src/main/resources"]
 	}
 	client {
@@ -70,9 +67,10 @@ sourceSets {
 	}
 }
 
-tasks.named("compileJava", JavaCompile) {
-	source(fileTree("${repoRoot}/versions/_legacy-common/src/main/java"))
-}
+// Excludes the 26.2-only sources and compiles rewritten copies of them instead,
+// so this target shares src/main/java with the primary build.
+apply from: "${repoRoot}/gradle/legacy-sources.gradle"
+applyLegacySources("${repoRoot}")
 
 dependencies {
 	minecraft "com.mojang:minecraft:${minecraftVersion}"
@@ -100,14 +98,14 @@ dependencies {
 }
 
 processResources {
-	inputs.property "version", project.version
+	inputs.property "version", resourceVersion
 	inputs.property "minecraft_dependency", "~${minecraftVersion}"
 	inputs.property "loader_dependency", ">=${loaderVersion}"
 	inputs.property "java_dependency", ">=${javaRelease}"
 	inputs.property "modmenu_entrypoint", "com.coffee.disguises.client.compat.ModMenuApiImpl"
 	filesMatching("fabric.mod.json") {
 		expand(
-				"version": project.version,
+				"version": resourceVersion,
 				"minecraft_dependency": "~${minecraftVersion}",
 				"loader_dependency": ">=${loaderVersion}",
 				"java_dependency": ">=${javaRelease}",
@@ -135,6 +133,16 @@ java {
 
 jar {
 	from("${repoRoot}/LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}" }
+		rename { "${it}_${archiveBaseName}" }
 	}
+}
+
+// MC 26.1.2 runs Fabric in the Mojang-mapped ("named") namespace at runtime — there is
+// no published intermediary for this version, and distributed mods (fabric-api,
+// simple-voice-chat, etc.) ship referencing net.minecraft.* mojmap names. Loom's
+// fabric-loom-remap default targets the "official" (obfuscated) namespace here, which
+// produces references like `cgk` that do not exist at runtime, causing
+// NoClassDefFoundError on load. Force the production jars into the runtime namespace.
+tasks.withType(net.fabricmc.loom.task.RemapJarTask).configureEach {
+	targetNamespace = "named"
 }

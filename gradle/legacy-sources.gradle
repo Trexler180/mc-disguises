@@ -1,0 +1,99 @@
+// Generates legacy-API copies of the handful of shared sources that reference
+// Minecraft symbols renamed in 26.2.
+//
+// Before this existed, versions/_legacy-common held hand-maintained duplicates of
+// DisguiseType.java, MetadataBuilder.java and PacketInterceptor.java — 3,724 lines
+// copied to change nine tokens.  Every fix to PacketInterceptor (the core of the
+// mod) had to be mirrored by hand or the legacy jars silently drifted from the
+// main one.  Now all targets compile from src/main/java and the differences are
+// applied here.
+//
+// The whole delta between 26.2 and the older targets is:
+//   1. EntityTypes  -> EntityType          (class renamed in 26.2)
+//   2. monster.cubemob.Slime -> monster.Slime  (class moved in 26.2)
+//   3. entries guarded by //#if ... //#endif exist only in 26.2
+//
+// Consumers must add `sourceSets.main.java.exclude(...)` for LEGACY_SOURCE_FILES
+// and wire compileJava to the generated directory; see applyLegacySources() below.
+
+ext.LEGACY_SOURCE_FILES = [
+        "com/coffee/disguises/disguise/DisguiseType.java",
+        "com/coffee/disguises/packet/MetadataBuilder.java",
+        "com/coffee/disguises/packet/PacketInterceptor.java",
+]
+
+// Rewrites one 26.2 source file into its legacy-API equivalent.
+//
+// Guarded blocks are stripped unconditionally: every target that applies this
+// script is older than 26.2, so `//#if MC>=26.2` is always false here.  If a
+// target at or above 26.2 ever needs generated sources, teach this closure to
+// actually evaluate the condition instead of assuming it.
+ext.transformLegacySource = { String source ->
+    StringBuilder out = new StringBuilder(source.length())
+    boolean skipping = false
+    Set<String> seenImports = new HashSet<String>()
+
+    source.eachLine { String line ->
+        String trimmed = line.trim()
+
+        if (trimmed.startsWith("//#if ")) { skipping = true; return }
+        if (trimmed == "//#endif") { skipping = false; return }
+        if (skipping) return
+
+        // \b anchors matter: `disabledEntityTypes` must not be rewritten.
+        line = line.replaceAll(/\bEntityTypes\b/, "EntityType")
+        line = line.replace("net.minecraft.world.entity.monster.cubemob.Slime",
+                "net.minecraft.world.entity.monster.Slime")
+
+        // DisguiseType imports both EntityType and EntityTypes; after the rename
+        // those collapse into the same import. Duplicates are legal Java but noisy.
+        String rewritten = line.trim()
+        if (rewritten.startsWith("import ") && !seenImports.add(rewritten)) return
+
+        out.append(line).append('\n')
+    }
+    return out.toString()
+}
+
+// Registers the generation task, excludes the 26.2-flavoured originals from the
+// main source set, and feeds the rewritten copies to javac instead.
+//
+// Deliberately does not touch java.srcDirs: each version build declares its own
+// (plus any per-version override directory), and quietly reassigning it here
+// would make that declaration a lie.
+ext.applyLegacySources = { String repoRoot ->
+    File sharedSrcRoot = file("${repoRoot}/src/main/java")
+    File outRoot = new File(layout.buildDirectory.get().asFile, "generated/sources/legacy/java")
+    List<String> relPaths = LEGACY_SOURCE_FILES
+
+    // Captured into locals so the doLast body below resolves them from its own
+    // scope rather than walking the closure owner chain out to project.ext,
+    // which does not reliably reach a script-plugin ext property at exec time.
+    def transform = transformLegacySource
+
+    def generate = tasks.register("generateLegacySources") {
+        group = "build"
+        description = "Rewrites 26.2-only API symbols so legacy targets build from the shared sources."
+
+        inputs.files(relPaths.collect { new File(sharedSrcRoot, it) })
+                .withPropertyName("sharedSources")
+        outputs.dir(outRoot).withPropertyName("generatedSources")
+
+        doLast {
+            outRoot.deleteDir()
+            relPaths.each { String rel ->
+                File dst = new File(outRoot, rel)
+                dst.parentFile.mkdirs()
+                dst.write(transform(new File(sharedSrcRoot, rel).getText("UTF-8")), "UTF-8")
+            }
+        }
+    }
+
+    // The 26.2-flavoured originals must not reach javac for a legacy target.
+    relPaths.each { sourceSets.main.java.exclude(it) }
+
+    tasks.named("compileJava", JavaCompile) {
+        dependsOn(generate)
+        source(fileTree(outRoot))
+    }
+}

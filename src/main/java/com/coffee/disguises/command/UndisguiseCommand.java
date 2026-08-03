@@ -27,7 +27,7 @@ public class UndisguiseCommand {
                 Commands.literal("undisguise")
                         // /undisguise — self
                         .requires(PermissionCompat.require("disguises.undisguise.self",
-                                DisguisesMod.CONFIG.permLevelSelf))
+                                () -> DisguisesMod.CONFIG.permLevelSelf))
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
                             return undisguise(ctx.getSource(), player);
@@ -36,7 +36,7 @@ public class UndisguiseCommand {
                         // /undisguise radius <num>
                         .then(Commands.literal("radius")
                                 .requires(PermissionCompat.require("disguises.undisguise.radius",
-                                        DisguisesMod.CONFIG.permLevelRadius))
+                                        () -> DisguisesMod.CONFIG.permLevelRadius))
                                 .then(Commands.argument("radius",
                                                 com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(0.5, 256.0))
                                         .executes(ctx -> {
@@ -68,7 +68,7 @@ public class UndisguiseCommand {
                         // so this single branch handles both cases.
                         .then(Commands.argument("target", EntityArgument.entity())
                                 .requires(PermissionCompat.require("disguises.undisguise.others",
-                                        DisguisesMod.CONFIG.permLevelOthers))
+                                        () -> DisguisesMod.CONFIG.permLevelOthers))
                                 .executes(ctx -> {
                                     Entity target = EntityArgument.getEntity(ctx, "target");
                                     return undisguise(ctx.getSource(), target);

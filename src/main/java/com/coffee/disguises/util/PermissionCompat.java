@@ -6,6 +6,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 
 import java.lang.reflect.Method;
 import java.util.function.Predicate;
+import java.util.function.IntSupplier;
 
 /**
  * Runtime bridge for fabric-permissions-api.
@@ -20,8 +21,19 @@ public final class PermissionCompat {
 
     private PermissionCompat() {}
 
-    public static Predicate<CommandSourceStack> require(String permission, int fallbackLevel) {
-        return source -> check(source, permission, fallbackLevel);
+    /**
+     * Creates a permission predicate whose vanilla fallback level is resolved for
+     * every check. This keeps registered command predicates in sync after a config
+     * reload replaces {@code DisguisesMod.CONFIG}.
+     *
+     * Deliberately supplier-only: an {@code int} overload would capture the level at
+     * command-registration time, so editing permLevel* and running /disguises reload
+     * would silently have no effect. Commands are registered once per server start,
+     * which makes that failure mode both easy to introduce and hard to notice.
+     */
+    public static Predicate<CommandSourceStack> require(
+            String permission, IntSupplier fallbackLevel) {
+        return source -> check(source, permission, fallbackLevel.getAsInt());
     }
 
     public static boolean check(CommandSourceStack source, String permission, int fallbackLevel) {

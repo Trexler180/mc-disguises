@@ -2,7 +2,9 @@ package com.coffee.disguises.command;
 
 import com.coffee.disguises.DisguisesMod;
 import com.coffee.disguises.command.argument.DisguiseTypeArgument;
+import com.coffee.disguises.core.DisguiseManager;
 import com.coffee.disguises.core.SavedDisguisesManager;
+import com.coffee.disguises.disguise.Disguise;
 import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.util.PermissionCompat;
 import com.mojang.brigadier.CommandDispatcher;
@@ -33,7 +35,7 @@ public class SavedDisguiseCommand {
         dispatcher.register(
                 Commands.literal("savedisguise")
                         .requires(PermissionCompat.require("disguises.savedisguise",
-                                DisguisesMod.CONFIG.permLevelSelf))
+                                () -> DisguisesMod.CONFIG.permLevelSelf))
 
                         // /savedisguise list
                         .then(Commands.literal("list")
@@ -132,7 +134,13 @@ public class SavedDisguiseCommand {
             return 0;
         }
 
-        SavedDisguisesManager.INSTANCE.save(player.getUUID(), name, disguiseString);
+        int max = DisguisesMod.CONFIG.maxSavedPresetsPerPlayer;
+        if (!SavedDisguisesManager.INSTANCE.save(player.getUUID(), name, disguiseString, max)) {
+            source.sendFailure(Component.literal(
+                    "§cYou already have the maximum of §e" + max
+                            + " §csaved presets. Delete one with §e/savedisguise delete <name>§c."));
+            return 0;
+        }
         source.sendSuccess(() -> Component.literal(
                 "§aSaved disguise preset §e" + name + " §7→ §a" + disguiseString), false);
         return 1;
@@ -147,8 +155,22 @@ public class SavedDisguiseCommand {
                     "§cNo preset named §e" + name + "§c. Use §e/savedisguise list§c to see your presets."));
             return 0;
         }
-        // Delegate to the /disguise command to avoid duplicating the disguise logic
+        // Delegate to the /disguise command to avoid duplicating the disguise logic.
+        //
+        // performPrefixedCommand returns void, so success is detected by checking
+        // whether the active disguise actually changed.  applyDisguise always stores
+        // a fresh Disguise instance (the async skin fetch on player disguises relies
+        // on that same identity invariant), so an unchanged reference means /disguise
+        // rejected the preset — the type is now in disabledEntityTypes, the player
+        // lost the permission, the flags no longer parse — and has already said why.
+        // Reporting success here regardless is how a red error and a green
+        // "Applied preset" ended up printed back to back.
+        Disguise before = DisguiseManager.INSTANCE.getDisguise(player);
         source.getServer().getCommands().performPrefixedCommand(source, "disguise " + disguiseString);
+        Disguise after = DisguiseManager.INSTANCE.getDisguise(player);
+
+        if (after == null || after == before) return 0;
+
         source.sendSuccess(() -> Component.literal("§aApplied preset §e" + name), false);
         return 1;
     }

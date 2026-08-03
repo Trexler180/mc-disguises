@@ -1,6 +1,7 @@
 package com.coffee.disguises.packet;
 
 import com.coffee.disguises.DisguisesMod;
+import com.coffee.disguises.util.BoundedCache;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
@@ -37,6 +38,7 @@ import java.util.function.Consumer;
 public class SkinFetcher {
 
     private static final int CACHE_MAX = 200;
+    private static final int BEDROCK_CACHE_MAX = CACHE_MAX * 2;
     private static final String GEYSER_API_BASE = "https://api.geysermc.org/v2";
 
     private static final YggdrasilAuthenticationService AUTH_SERVICE =
@@ -60,21 +62,17 @@ public class SkinFetcher {
 
     private static final ConcurrentHashMap<String, CompletableFuture<GameProfile>> IN_FLIGHT =
             new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, BedrockSkin> BEDROCK_SKINS =
-            new ConcurrentHashMap<>();
+    private static final BoundedCache<String, BedrockSkin> BEDROCK_SKINS =
+            new BoundedCache<>(BEDROCK_CACHE_MAX);
     private static final AtomicBoolean FLOODGATE_SKIN_LISTENER_REGISTERED =
             new AtomicBoolean(false);
 
-    private static final Map<String, GameProfile> CACHE = Collections.synchronizedMap(
-            new LinkedHashMap<>(16, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<String, GameProfile> e) {
-                    return size() > CACHE_MAX;
-                }
-            });
+    private static final BoundedCache<String, GameProfile> CACHE =
+            new BoundedCache<>(CACHE_MAX);
 
     private record BedrockIdentity(String xuid, String name) {}
     private record BedrockSkin(String value, String signature) {}
+    private record OnlineIdentity(UUID uuid, String name) {}
 
     // -----------------------------------------------------------------------
 
@@ -83,14 +81,32 @@ public class SkinFetcher {
     }
 
     public static void fetchByName(String name, MinecraftServer server, Consumer<GameProfile> cb) {
+        runOnServerThread(server, () -> startNameFetch(name, server, cb));
+    }
+
+    private static void startNameFetch(
+            String name, MinecraftServer server, Consumer<GameProfile> cb) {
         tryRegisterFloodgateSkinListener();
         String key = name.toLowerCase(Locale.ROOT);
         GameProfile hit = CACHE.get(key);
         if (hit != null && hasTextures(hit)) { server.execute(() -> cb.accept(hit)); return; }
         if (hit != null) CACHE.remove(key);
 
+        ServerPlayer online = server.getPlayerList().getPlayerByName(name);
+        OnlineIdentity onlineIdentity = null;
+        if (online != null) {
+            GameProfile onlineProfile = online.getGameProfile();
+            if (hasTextures(onlineProfile)) {
+                CACHE.put(key, onlineProfile);
+                server.execute(() -> cb.accept(onlineProfile));
+                return;
+            }
+            onlineIdentity = new OnlineIdentity(online.getUUID(), onlineProfile.name());
+        }
+        OnlineIdentity snapshot = onlineIdentity;
+
         IN_FLIGHT.computeIfAbsent(key, k ->
-                        CompletableFuture.supplyAsync(() -> resolveByName(name, server), EXECUTOR)
+                        CompletableFuture.supplyAsync(() -> resolveByName(name, snapshot), EXECUTOR)
                                 .orTimeout(20, TimeUnit.SECONDS)
                                 .exceptionally(e -> {
                                     DisguisesMod.LOGGER.warn("Disguises: skin fetch for '{}' failed: {}",
@@ -105,14 +121,33 @@ public class SkinFetcher {
     }
 
     public static void fetchByUUID(UUID uuid, MinecraftServer server, Consumer<GameProfile> cb) {
+        runOnServerThread(server, () -> startUuidFetch(uuid, server, cb));
+    }
+
+    private static void startUuidFetch(
+            UUID uuid, MinecraftServer server, Consumer<GameProfile> cb) {
         tryRegisterFloodgateSkinListener();
         String key = "uuid:" + uuid;
         GameProfile hit = CACHE.get(key);
         if (hit != null && hasTextures(hit)) { server.execute(() -> cb.accept(hit)); return; }
         if (hit != null) CACHE.remove(key);
 
+        OnlineIdentity onlineIdentity = null;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (!player.getUUID().equals(uuid)) continue;
+            GameProfile onlineProfile = player.getGameProfile();
+            if (hasTextures(onlineProfile)) {
+                CACHE.put(key, onlineProfile);
+                server.execute(() -> cb.accept(onlineProfile));
+                return;
+            }
+            onlineIdentity = new OnlineIdentity(player.getUUID(), onlineProfile.name());
+            break;
+        }
+        OnlineIdentity snapshot = onlineIdentity;
+
         IN_FLIGHT.computeIfAbsent(key, k ->
-                        CompletableFuture.supplyAsync(() -> resolveByUUID(uuid, server), EXECUTOR)
+                        CompletableFuture.supplyAsync(() -> resolveByUUID(uuid, snapshot), EXECUTOR)
                                 .orTimeout(20, TimeUnit.SECONDS)
                                 .exceptionally(e -> {
                                     DisguisesMod.LOGGER.warn("Disguises: skin fetch for UUID {} failed: {}",
@@ -126,7 +161,15 @@ public class SkinFetcher {
                 }));
     }
 
-    public static void clearCache() { CACHE.clear(); }
+    public static void clearCache() {
+        CACHE.clear();
+        BEDROCK_SKINS.clear();
+    }
+
+    private static void runOnServerThread(MinecraftServer server, Runnable action) {
+        if (server.isSameThread()) action.run();
+        else server.execute(action);
+    }
 
     private static String rootMessage(Throwable t) {
         Throwable cur = t;
@@ -141,16 +184,10 @@ public class SkinFetcher {
 
     // -----------------------------------------------------------------------
 
-    private static GameProfile resolveByName(String name, MinecraftServer server) {
+    private static GameProfile resolveByName(String name, OnlineIdentity online) {
         // 1. Already online — free and instant
-        ServerPlayer online = server.getPlayerList().getPlayerByName(name);
         if (online != null) {
-            GameProfile onlineProfile = online.getGameProfile();
-            if (hasTextures(onlineProfile)) {
-                DisguisesMod.LOGGER.debug("Disguises: skin for '{}' from online player.", name);
-                return onlineProfile;
-            }
-            GameProfile bedrockProfile = resolveOnlineBedrock(online, name);
+            GameProfile bedrockProfile = resolveOnlineBedrock(online.uuid(), online.name());
             if (bedrockProfile != null) return bedrockProfile;
             DisguisesMod.LOGGER.debug(
                     "Disguises: online profile for '{}' has no textures; resolving full profile.",
@@ -202,16 +239,11 @@ public class SkinFetcher {
         return resolveBedrockByNameOrXuid(name);
     }
 
-    private static GameProfile resolveByUUID(UUID uuid, MinecraftServer server) {
+    private static GameProfile resolveByUUID(UUID uuid, OnlineIdentity online) {
         // 1. Already online
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (p.getUUID().equals(uuid)) {
-                GameProfile onlineProfile = p.getGameProfile();
-                if (hasTextures(onlineProfile)) return onlineProfile;
-                GameProfile bedrockProfile = resolveOnlineBedrock(p, p.getGameProfile().name());
-                if (bedrockProfile != null) return bedrockProfile;
-                break;
-            }
+        if (online != null) {
+            GameProfile bedrockProfile = resolveOnlineBedrock(online.uuid(), online.name());
+            if (bedrockProfile != null) return bedrockProfile;
         }
 
         // 2. UUID → full profile with skin textures
@@ -232,9 +264,9 @@ public class SkinFetcher {
     // Bedrock/Geyser/Floodgate skin resolution
     // -----------------------------------------------------------------------
 
-    private static GameProfile resolveOnlineBedrock(ServerPlayer player, String fallbackName) {
-        BedrockIdentity identity = getFloodgateIdentity(player.getUUID(), fallbackName);
-        if (identity == null) identity = getGeyserIdentity(player.getUUID(), fallbackName);
+    private static GameProfile resolveOnlineBedrock(UUID playerUuid, String fallbackName) {
+        BedrockIdentity identity = getFloodgateIdentity(playerUuid, fallbackName);
+        if (identity == null) identity = getGeyserIdentity(playerUuid, fallbackName);
         if (identity == null) return null;
         GameProfile profile = fetchBedrockSkin(identity);
         if (profile != null) {

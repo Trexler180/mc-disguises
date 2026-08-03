@@ -132,7 +132,24 @@ public class DisguiseManager {
 
     /** Clears ALL observer-specific overrides for an entity. */
     public void clearObserverDisguises(Entity entity) {
-        observerDisguises.remove(entity.getUUID());
+        clearObserverDisguisesAndGetObservers(entity);
+    }
+
+    /**
+     * Clears all overrides for an entity and returns the affected observer UUIDs
+     * so callers can immediately refresh their client-side view.
+     */
+    public Set<UUID> clearObserverDisguisesAndGetObservers(Entity entity) {
+        ConcurrentHashMap<UUID, Disguise> removed = observerDisguises.remove(entity.getUUID());
+        return removed == null ? Set.of() : Set.copyOf(removed.keySet());
+    }
+
+    /** Removes every override owned by an observer that is leaving the server. */
+    public void removeObserverDisguises(UUID observerUUID) {
+        observerDisguises.forEach((entityUUID, overrides) -> {
+            overrides.remove(observerUUID);
+            if (overrides.isEmpty()) observerDisguises.remove(entityUUID, overrides);
+        });
     }
 
     // =========================================================================
@@ -209,12 +226,42 @@ public class DisguiseManager {
      * @return true if the disguise was removed, false if cancelled or no disguise was active.
      */
     public boolean removeDisguise(Entity entity, boolean sendVanillaRespawn) {
-        if (!isDisguised(entity)) return false;
+        return removeDisguiseInternal(entity, sendVanillaRespawn, true, true);
+    }
 
+    /**
+     * Permanently tears down state for a destroyed entity. Lifecycle cleanup must
+     * not be vetoed by BEFORE_UNDISGUISE listeners.
+     */
+    public boolean removeDisguiseForLifecycle(Entity entity) {
+        return removeDisguiseInternal(entity, false, false, true);
+    }
+
+    /**
+     * Detaches the in-memory disguise on disconnect after it has been persisted.
+     * The persisted entry is intentionally retained for the next login.
+     */
+    public boolean detachDisguiseOnDisconnect(ServerPlayer player) {
+        return removeDisguiseInternal(player, false, false, false);
+    }
+
+    private boolean removeDisguiseInternal(Entity entity, boolean sendVanillaRespawn,
+                                            boolean fireBeforeEvent, boolean removePersisted) {
         Disguise existing = activeDisguises.get(entity.getUUID());
+        if (existing == null) {
+            if (!fireBeforeEvent) {
+                observerDisguises.remove(entity.getUUID());
+                PacketInterceptor.cleanupForRemovedEntity(serverFor(entity), entity.getUUID());
+                if (removePersisted && DisguisesMod.CONFIG.persistDisguises) {
+                    removePersistedDisguise(entity.getUUID());
+                }
+            }
+            return false;
+        }
 
         // Fire before-event (cancellable)
-        if (!DisguiseEvents.BEFORE_UNDISGUISE.invoker().onBeforeUndisguise(entity, existing)) {
+        if (fireBeforeEvent
+                && !DisguiseEvents.BEFORE_UNDISGUISE.invoker().onBeforeUndisguise(entity, existing)) {
             return false;
         }
 
@@ -222,6 +269,7 @@ public class DisguiseManager {
 
         // Remove FIRST so the ServerEntityMixin sees no disguise on re-track
         activeDisguises.remove(entity.getUUID());
+        observerDisguises.remove(entity.getUUID());
 
         // Destroy + respawn vanilla for all nearby OTHER players
         if (sendVanillaRespawn) {
@@ -233,10 +281,7 @@ public class DisguiseManager {
         // refreshForNearbyPlayers skips.  Required so leftover entries (especially
         // for showDisguiseInTab=true, where no deferred remove was queued) don't
         // persist after disconnect/dim-change/undisguise.
-        net.minecraft.server.MinecraftServer mcServer = null;
-        if (entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
-            mcServer = level.getServer();
-        }
+        net.minecraft.server.MinecraftServer mcServer = serverFor(entity);
         PacketInterceptor.cleanupForRemovedEntity(mcServer, entity.getUUID());
 
         // Restore vanilla self-view if it was active; save the preference so it is
@@ -250,17 +295,39 @@ public class DisguiseManager {
 
         DisguiseEvents.AFTER_UNDISGUISE.invoker().onAfterUndisguise(entity);
         DisguisesMod.LOGGER.debug("Removed disguise from entity {}", entity.getUUID());
-        if (sendVanillaRespawn && DisguisesMod.CONFIG.persistDisguises) {
+        if (removePersisted && DisguisesMod.CONFIG.persistDisguises) {
             removePersistedDisguise(entity.getUUID());
         }
         return true;
     }
 
+    private static MinecraftServer serverFor(Entity entity) {
+        if (entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            return level.getServer();
+        }
+        return null;
+    }
+
     // =========================================================================
     // Persistence
     // =========================================================================
+    //
+    // disguises-persisted.json is mirrored in memory and written at most once every
+    // PERSIST_FLUSH_INTERVAL_TICKS.  Each mutation used to re-read and re-write the
+    // entire file inline on the server thread, so `/undisguise radius 256` cost one
+    // full parse + serialise per matched entity — a stall that scaled with how many
+    // entities happened to be disguised.  The same command now dirties the in-memory
+    // map N times and hits the disk once.
 
-    /** Persist a player's current disguise immediately. Called on disconnect before active state is removed. */
+    /** Minimum ticks between writes of the persisted-disguise file. */
+    private static final int PERSIST_FLUSH_INTERVAL_TICKS = 20;
+
+    /** In-memory mirror of {@link #PERSIST_PATH}; loaded on first use. */
+    private JsonObject persistedRoot;
+    private boolean persistDirty;
+    private long lastPersistFlushTick;
+
+    /** Persist a player's current disguise. Called on disconnect before active state is removed. */
     public void saveDisguise(ServerPlayer player) {
         Disguise disguise = getDisguise(player);
         if (disguise == null) {
@@ -268,49 +335,75 @@ public class DisguiseManager {
             return;
         }
 
-        JsonObject root = readPersistedRoot();
-        root.add(player.getUUID().toString(), serializeDisguise(disguise));
-        writePersistedRoot(root);
+        persistedRoot().add(player.getUUID().toString(), serializeDisguise(disguise));
+        persistDirty = true;
         DisguisesMod.LOGGER.debug("Persisted disguise for {}", player.getUUID());
     }
 
     /** Persist all active disguises to disk. Called on server stop. */
     public void persistAll(MinecraftServer server) {
-        JsonObject root = readPersistedRoot();
+        JsonObject root = persistedRoot();
         for (Map.Entry<UUID, Disguise> entry : activeDisguises.entrySet()) {
             root.add(entry.getKey().toString(), serializeDisguise(entry.getValue()));
         }
-        writePersistedRoot(root);
+        persistDirty = true;
+        flushPersisted();
         DisguisesMod.LOGGER.info("Persisted {} active disguises to disk.", activeDisguises.size());
+    }
+
+    /**
+     * Writes pending persistence changes if enough ticks have passed.
+     * Called every tick from {@code DisguisesMod}; cheap and returns immediately
+     * when nothing has changed.
+     */
+    public void flushPersistedIfDue(MinecraftServer server) {
+        if (!persistDirty) return;
+        long tick = server.getTickCount();
+        if (tick - lastPersistFlushTick < PERSIST_FLUSH_INTERVAL_TICKS) return;
+        lastPersistFlushTick = tick;
+        flushPersisted();
+    }
+
+    private void flushPersisted() {
+        if (!persistDirty || persistedRoot == null) return;
+        writePersistedRoot(persistedRoot);
+        persistDirty = false;
     }
 
     /** Load persisted disguises from disk. Called on server start. */
     public void loadPersistedDisguises(MinecraftServer server) {
-        if (!Files.exists(PERSIST_PATH)) return;
-        try (Reader r = Files.newBufferedReader(PERSIST_PATH)) {
-            JsonObject root = GSON.fromJson(r, JsonObject.class);
-            if (root == null) return;
-            for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
-                try {
-                    UUID uuid = UUID.fromString(entry.getKey());
-                    JsonObject obj = entry.getValue().getAsJsonObject();
-                    deserializeDisguise(obj).ifPresent(disguise -> activeDisguises.put(uuid, disguise));
-                } catch (Exception ex) {
-                    DisguisesMod.LOGGER.warn("Failed to load persisted disguise entry: {}",
-                            entry.getKey());
-                }
+        JsonObject root = readPersistedRoot();
+        persistedRoot = root;
+        persistDirty = false;
+
+        for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
+            try {
+                UUID uuid = UUID.fromString(entry.getKey());
+                JsonObject obj = entry.getValue().getAsJsonObject();
+                deserializeDisguise(obj).ifPresent(disguise -> activeDisguises.put(uuid, disguise));
+            } catch (Exception ex) {
+                DisguisesMod.LOGGER.warn("Failed to load persisted disguise entry: {}",
+                        entry.getKey());
             }
-            DisguisesMod.LOGGER.info("Loaded {} persisted disguises.", activeDisguises.size());
-        } catch (IOException e) {
-            DisguisesMod.LOGGER.error("Failed to load persisted disguises", e);
         }
+        DisguisesMod.LOGGER.info("Loaded {} persisted disguises.", activeDisguises.size());
     }
 
     private void removePersistedDisguise(UUID uuid) {
-        JsonObject root = readPersistedRoot();
-        if (root.remove(uuid.toString()) != null) {
-            writePersistedRoot(root);
+        if (persistedRoot().remove(uuid.toString()) != null) {
+            persistDirty = true;
         }
+    }
+
+    /**
+     * The in-memory mirror, read from disk on first touch.  Loading lazily rather
+     * than only at SERVER_STARTED matters because persistDisguises can be switched
+     * on by `/disguises reload` mid-session — without this, the first flush after
+     * that would overwrite the file with an empty document.
+     */
+    private JsonObject persistedRoot() {
+        if (persistedRoot == null) persistedRoot = readPersistedRoot();
+        return persistedRoot;
     }
 
     private static JsonObject readPersistedRoot() {
@@ -325,8 +418,8 @@ public class DisguiseManager {
     }
 
     private static void writePersistedRoot(JsonObject root) {
-        try (Writer w = Files.newBufferedWriter(PERSIST_PATH)) {
-            GSON.toJson(root, w);
+        try {
+            com.coffee.disguises.util.JsonFiles.write(PERSIST_PATH, GSON, root);
         } catch (IOException e) {
             DisguisesMod.LOGGER.error("Failed to persist disguises", e);
         }

@@ -1,9 +1,31 @@
 #
 # https://help.github.com/articles/dealing-with-line-endings/
 #
+
+# Normalise everything textual to LF in the repository.
+#
+# Without this, files written by a Windows editor land as CRLF while the rest of
+# the tree is LF.  That already happened to the generated legacy copy of
+# PacketInterceptor.java: diff reported all 1,532 lines as changed, so the one
+# tool that could have caught real drift between the copies was useless.
+* text=auto eol=lf
+
+# Sources and config — always LF, on every platform.
+*.java          text eol=lf
+*.gradle        text eol=lf
+*.json          text eol=lf
+*.properties    text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.sh            text eol=lf
+
 # Linux start script should use lf
 /gradlew        text eol=lf
 
 # These are Windows script files and should use crlf
 *.bat           text eol=crlf
 
+# Binary — never touch.
+*.jar           binary
+*.png           binary
+*.ogg           binary

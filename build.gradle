@@ -4,12 +4,16 @@ plugins {
 }
 
 def javaRelease = 25
+def archiveBaseName = project.archives_base_name
+def resourceVersion = project.mod_version
+def minecraftDependency = "~${project.minecraft_version}"
+def loaderDependency = ">=${project.loader_version}"
 
-version = project.mod_version
+version = resourceVersion
 group = project.maven_group
 
 base {
-	archivesName = project.archives_base_name
+	archivesName = archiveBaseName
 }
 
 repositories {
@@ -65,19 +69,22 @@ dependencies {
 	// ModMenu (optional)
 	compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 	runtimeOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+	testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
 processResources {
-	inputs.property "version", project.version
-	inputs.property "minecraft_dependency", "~${project.minecraft_version}"
-	inputs.property "loader_dependency", ">=${project.loader_version}"
+	inputs.property "version", resourceVersion
+	inputs.property "minecraft_dependency", minecraftDependency
+	inputs.property "loader_dependency", loaderDependency
 	inputs.property "java_dependency", ">=${javaRelease}"
 	inputs.property "modmenu_entrypoint", "com.coffee.disguises.client.compat.ModMenuApiImpl"
 	filesMatching("fabric.mod.json") {
 		expand(
-				"version": project.version,
-				"minecraft_dependency": "~${project.minecraft_version}",
-				"loader_dependency": ">=${project.loader_version}",
+				"version": resourceVersion,
+				"minecraft_dependency": minecraftDependency,
+				"loader_dependency": loaderDependency,
 				"java_dependency": ">=${javaRelease}",
 				"modmenu_entrypoint": "com.coffee.disguises.client.compat.ModMenuApiImpl"
 		)
@@ -86,6 +93,10 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = javaRelease
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 java {
@@ -122,6 +133,6 @@ tasks.register("buildMc12111", Exec) {
 
 jar {
 	from("LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}" }
+		rename { "${it}_${archiveBaseName}" }
 	}
 }

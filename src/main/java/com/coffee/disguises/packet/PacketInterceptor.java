@@ -1096,7 +1096,11 @@ public class PacketInterceptor {
         pendingTabRemove.removeIf(tr -> tr.observer().getUUID().equals(observerUUID));
         pendingDataResend.removeIf(pe -> pe.observer().getUUID().equals(observerUUID));
         pendingSelfViewRespawn.removeIf(pr -> pr.playerUUID().equals(observerUUID));
+        // Drop the now-empty per-entity maps too, the way cleanupForRemovedEntity
+        // does for injectedTabEntries — otherwise one empty inner map is left behind
+        // per disguised entity every time an observer disconnects.
         lastSyncPos.values().forEach(m -> m.remove(observerUUID));
+        lastSyncPos.entrySet().removeIf(e -> e.getValue().isEmpty());
     }
 
     private static GameProfile buildSkinProfile(UUID fakeUUID, GameProfile skinSource) {

@@ -55,12 +55,10 @@ public abstract class EntityRemoveMixin {
         // Players are handled by the respawn/disconnect lifecycle events.
         if (self instanceof ServerPlayer) return;
 
-        if (!DisguiseManager.INSTANCE.isDisguised(self)) return;
-
         // sendVanillaRespawn = false: the entity is going away, so there is nothing
         // to revert to.  Vanilla's own tracker removal packet clears the fake entity
-        // (it reuses the real entity id), and removeDisguise() still clears injected
-        // tab profiles and nametag-hide teams across all observers.
-        DisguiseManager.INSTANCE.removeDisguise(self, false);
+        // (it reuses the real entity id), and lifecycle cleanup still clears injected
+        // tab profiles, observer overrides, and nametag-hide teams across all observers.
+        DisguiseManager.INSTANCE.removeDisguiseForLifecycle(self);
     }
 }

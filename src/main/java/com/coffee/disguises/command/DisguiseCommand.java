@@ -67,7 +67,7 @@ public class DisguiseCommand {
                         // "player" as a type id string.
                         .then(Commands.literal("player")
                                 .requires(PermissionCompat.require("disguises.disguise.self",
-                                        DisguisesMod.CONFIG.permLevelSelf))
+                                        () -> DisguisesMod.CONFIG.permLevelSelf))
                                 .then(Commands.argument("playerName", StringArgumentType.string())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "playerName");
@@ -89,7 +89,7 @@ public class DisguiseCommand {
                         // Exists because /disguise player ... routes to the literal above.
                         .then(Commands.literal("as")
                                 .requires(PermissionCompat.require("disguises.disguise.self",
-                                        DisguisesMod.CONFIG.permLevelSelf))
+                                        () -> DisguisesMod.CONFIG.permLevelSelf))
                                 .then(Commands.argument("skinName", StringArgumentType.string())
                                         .executes(ctx -> {
                                             String name = StringArgumentType.getString(ctx, "skinName");
@@ -112,7 +112,7 @@ public class DisguiseCommand {
                         //   /disguise entity <selector> player <skinName> [flags]
                         .then(Commands.literal("entity")
                                 .requires(PermissionCompat.require("disguises.disguise.entity",
-                                        DisguisesMod.CONFIG.permLevelEntity))
+                                        () -> DisguisesMod.CONFIG.permLevelEntity))
                                 .then(Commands.argument("target", EntityArgument.entity())
                                         // entity → player <skinName> [flags]
                                         .then(Commands.literal("player")
@@ -158,7 +158,7 @@ public class DisguiseCommand {
                         // Disguise all entities within radius of the command source.
                         .then(Commands.literal("radius")
                                 .requires(PermissionCompat.require("disguises.disguise.radius",
-                                        DisguisesMod.CONFIG.permLevelRadius))
+                                        () -> DisguisesMod.CONFIG.permLevelRadius))
                                 .then(Commands.argument("radius", DoubleArgumentType.doubleArg(0.5, 256.0))
                                         // radius → player <skinName> [flags]
                                         .then(Commands.literal("player")
@@ -204,7 +204,7 @@ public class DisguiseCommand {
                         // Apply additional flag mutations to an already-active disguise.
                         .then(Commands.literal("modify")
                                 .requires(PermissionCompat.require("disguises.disguise.self",
-                                        DisguisesMod.CONFIG.permLevelSelf))
+                                        () -> DisguisesMod.CONFIG.permLevelSelf))
                                 .then(Commands.argument("flags", StringArgumentType.greedyString())
                                         .suggests(DisguiseTypeArgument::suggestFlags)
                                         .executes(ctx -> {
@@ -218,7 +218,7 @@ public class DisguiseCommand {
                         // Toggle whether the disguised player sees their own disguise.
                         .then(Commands.literal("viewself")
                                 .requires(PermissionCompat.require("disguises.viewself",
-                                        DisguisesMod.CONFIG.permLevelSelf))
+                                        () -> DisguisesMod.CONFIG.permLevelSelf))
                                 .executes(ctx -> viewSelf(ctx.getSource(), null))
                                 .then(Commands.literal("on")
                                         .executes(ctx -> viewSelf(ctx.getSource(), true)))
@@ -234,7 +234,7 @@ public class DisguiseCommand {
                         // this argument node so Brigadier resolves them first.
                         .then(Commands.argument("type", StringArgumentType.word())
                                 .requires(PermissionCompat.require("disguises.disguise.self",
-                                        DisguisesMod.CONFIG.permLevelSelf))
+                                        () -> DisguisesMod.CONFIG.permLevelSelf))
                                 .suggests(DisguiseTypeArgument::suggest)
                                 .executes(ctx -> {
                                     DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
@@ -254,7 +254,7 @@ public class DisguiseCommand {
                                 // from the self branch cleanly.
                                 .then(Commands.argument("target", EntityArgument.player())
                                         .requires(PermissionCompat.require("disguises.disguise.others",
-                                                DisguisesMod.CONFIG.permLevelOthers))
+                                                () -> DisguisesMod.CONFIG.permLevelOthers))
                                         .executes(ctx -> {
                                             DisguiseType type = DisguiseTypeArgument.get(ctx, "type");
                                             ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
@@ -744,7 +744,8 @@ public class DisguiseCommand {
             return false;
         }
         if (DisguisesMod.CONFIG.enforceTypePermissions) {
-            boolean hasPerm = PermissionCompat.check(source, "disguises.type." + type.getId(), 4);
+            boolean hasPerm = PermissionCompat.check(source, "disguises.type." + type.getId(),
+                    DisguisesMod.CONFIG.permLevelType);
             if (!hasPerm) {
                 source.sendFailure(Component.literal(
                         "§cYou do not have permission to use the disguise type §e"

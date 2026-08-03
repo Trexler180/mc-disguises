@@ -12,13 +12,19 @@ def loaderVersion = "0.19.2"
 def fabricVersion = "0.141.4+1.21.11"
 def clothConfigVersion = "21.11.153"
 def modmenuVersion = "17.0.0"
+// MC 1.21.11 runs on Java 21. This is also why src/main/resources/disguises.mixins.json
+// declares compatibilityLevel JAVA_21 even though the 26.2 target compiles at 25: that
+// file is shared by every target, and Mixin rejects a compatibility level the running
+// JVM cannot provide — declaring JAVA_25 there would break this jar on a Java 21 JVM.
 def javaRelease = 21
+def archiveBaseName = rootProperties.getProperty("archives_base_name")
+def resourceVersion = rootProperties.getProperty("mod_version")
 
-version = rootProperties.getProperty("mod_version")
+version = resourceVersion
 group = rootProperties.getProperty("maven_group")
 
 base {
-	archivesName = rootProperties.getProperty("archives_base_name")
+	archivesName = archiveBaseName
 }
 
 repositories {
@@ -61,10 +67,6 @@ sourceSets {
 		java.exclude("com/coffee/disguises/disguise/SoundCompat.java")
 		java.exclude("com/coffee/disguises/compat/EntityTagCompat.java")
 		java.exclude("com/coffee/disguises/mixin/AttackKickMixin.java")
-		// These files use the 26.2 API; pull old-API copies from versions/_legacy-common.
-		java.exclude("com/coffee/disguises/disguise/DisguiseType.java")
-		java.exclude("com/coffee/disguises/packet/MetadataBuilder.java")
-		java.exclude("com/coffee/disguises/packet/PacketInterceptor.java")
 		resources.srcDirs = ["${repoRoot}/src/main/resources"]
 	}
 	client {
@@ -95,14 +97,14 @@ dependencies {
 }
 
 processResources {
-	inputs.property "version", project.version
+	inputs.property "version", resourceVersion
 	inputs.property "minecraft_dependency", "~${minecraftVersion}"
 	inputs.property "loader_dependency", ">=${loaderVersion}"
 	inputs.property "java_dependency", ">=${javaRelease}"
 	inputs.property "modmenu_entrypoint", "com.coffee.disguises.client.compat.ModMenuApiImpl"
 	filesMatching("fabric.mod.json") {
 		expand(
-				"version": project.version,
+				"version": resourceVersion,
 				"minecraft_dependency": "~${minecraftVersion}",
 				"loader_dependency": ">=${loaderVersion}",
 				"java_dependency": ">=${javaRelease}",
@@ -117,8 +119,12 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named("compileJava", JavaCompile) {
 	source(fileTree("src/main/java"))
-	source(fileTree("${repoRoot}/versions/_legacy-common/src/main/java"))
 }
+
+// Excludes the 26.2-only sources and compiles rewritten copies of them instead,
+// so this target shares src/main/java with the primary build.
+apply from: "${repoRoot}/gradle/legacy-sources.gradle"
+applyLegacySources("${repoRoot}")
 
 tasks.withType(AbstractArchiveTask).configureEach {
 	archiveClassifier = "mc1.21.11"
@@ -135,6 +141,6 @@ java {
 
 jar {
 	from("${repoRoot}/LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}" }
+		rename { "${it}_${archiveBaseName}" }
 	}
 }

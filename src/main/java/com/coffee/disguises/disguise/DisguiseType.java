@@ -422,6 +422,7 @@ public enum DisguiseType {
             () -> SoundEvents.SLIME_HURT_SMALL,
             () -> SoundEvents.SLIME_DEATH),
 
+    //#if MC>=26.2
     // Cube mob added in 26.2 (Chaos Cubed). Hops like a slime and shares the
     // AbstractCubeMob size metadata (index 16), so SlimeWatcher applies directly.
     SULFUR_CUBE("sulfur_cube", EntityTypes.SULFUR_CUBE, SlimeWatcher.class, false,
@@ -429,6 +430,7 @@ public enum DisguiseType {
             () -> SoundEvents.SLIME_HURT_SMALL,
             () -> SoundEvents.SLIME_DEATH),
 
+    //#endif
     SPIDER("spider", EntityTypes.SPIDER, LivingEntityWatcher.class, false,
             () -> SoundEvents.SPIDER_AMBIENT,
             () -> SoundEvents.SPIDER_HURT,

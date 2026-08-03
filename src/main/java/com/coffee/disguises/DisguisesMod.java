@@ -64,6 +64,18 @@ public class DisguisesMod implements ModInitializer {
             PacketInterceptor.syncVanishedDisguisedPositions(server);
             PacketInterceptor.syncSelfViewPuppets(server);
 
+            // Batches disguise-persistence writes: mutations mark the in-memory
+            // map dirty and this writes it out at most once per second, instead
+            // of one full file rewrite per disguise change.
+            //
+            // Deliberately not gated on CONFIG.persistDisguises. Only code paths that
+            // already checked that flag can dirty the map, so anything pending here is
+            // work that was authorised when it happened — and turning persistence off
+            // via /disguises reload in the second before a flush must not silently
+            // discard it and leave the file describing a state that no longer exists.
+            // Returns immediately when nothing is dirty, so this costs nothing.
+            DisguiseManager.INSTANCE.flushPersistedIfDue(server);
+
             if (!CONFIG.showDisguiseActionBar) return;
             if (CONFIG.actionBarIntervalTicks <= 0) return;
             if (server.getTickCount() % CONFIG.actionBarIntervalTicks != 0) return;
@@ -105,7 +117,8 @@ public class DisguisesMod implements ModInitializer {
             if (CONFIG.persistDisguises) {
                 DisguiseManager.INSTANCE.saveDisguise(handler.player);
             }
-            DisguiseManager.INSTANCE.removeDisguise(handler.player, false);
+            DisguiseManager.INSTANCE.detachDisguiseOnDisconnect(handler.player);
+            DisguiseManager.INSTANCE.removeObserverDisguises(handler.player.getUUID());
             // Drop any per-observer state tied to the disconnecting player so it
             // doesn't leak (small map entries, queued packet sends targeted at
             // their now-dead connection, etc.).

@@ -83,6 +83,8 @@ Full tab-completion for all flags and their values is supported.
 | `/disguises info [player]` | Show active disguise info |
 | `/disguises list` | List all currently disguised entities |
 | `/disguises clearcache` | Clear the player-skin cache |
+| `/disguises names` | Show chat/death disguise-name settings |
+| `/disguises names <chat\|system\|hover> <on\|off>` | Change and persist a disguise-name setting (`death` remains an alias for `system`) |
 | `/disguises observer <target> <viewer> <type> [flags]` | Set a per-observer disguise override |
 | `/disguises removeobserver <target> <viewer>` | Remove one per-observer disguise override |
 | `/disguises clearobservers <target>` | Remove all per-observer overrides for an entity |
@@ -106,6 +108,9 @@ Full tab-completion for all flags and their values is supported.
 | `selfDisguiseDefault` | `false` | Players see their own disguise by default |
 | `showDisguiseInTab` | `false` | Keep fake player disguises visible in the tab list while skins load |
 | `tabRemoveDelayTicks` | `20` | Ticks before removing a fake player tab entry after spawn |
+| `disguiseNamesInChat` | `false` | Show disguise names as signed-chat display names (also configurable with `/disguises names chat`) |
+| `disguiseNamesInDeathMessages` | `false` | Show global disguise names in system messages such as deaths and advancements (config key retained for compatibility; use `/disguises names system`) |
+| `revealRealNameOnHover` | `true` | Reveal the real account name when hovering a substituted name (also configurable with `/disguises names hover`) |
 | `vanishedEntitiesHidden` | `true` | Hide vanished disguised entities from unauthorized observers |
 | `undisguiseOnDeath` | `false` | Remove disguise when the player dies |
 | `undisguiseOnWorldChange` | `false` | Remove disguise on dimension change |

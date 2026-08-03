@@ -20,6 +20,7 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,13 +29,16 @@ import java.util.UUID;
  *   /disguises info [player]        → show active disguise for a player
  *   /disguises list                 → list all disguised entities
  *   /disguises clearcache           → clear skin cache
+ *   /disguises names                → show disguise-name presentation settings
+ *   /disguises names <setting> on|off → update and persist a name setting
  */
 public class DisguisesAdminCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
                 Commands.literal("disguises")
-                        .requires(PermissionCompat.require("disguises.admin", DisguisesMod.CONFIG.permLevelAdmin))
+                        .requires(PermissionCompat.require("disguises.admin",
+                                () -> DisguisesMod.CONFIG.permLevelAdmin))
 
                         // /disguises reload
                         .then(Commands.literal("reload")
@@ -94,6 +98,26 @@ public class DisguisesAdminCommand {
                                 })
                         )
 
+                        // /disguises names [chat|death|hover] [on|off]
+                        // These are server-wide presentation policies, so they belong
+                        // on the admin command rather than on an individual disguise.
+                        .then(Commands.literal("names")
+                                .executes(ctx -> showNameSettings(ctx.getSource()))
+                                .then(booleanSetting("chat",
+                                        () -> DisguisesMod.CONFIG.disguiseNamesInChat,
+                                        value -> DisguisesMod.CONFIG.disguiseNamesInChat = value))
+                                .then(booleanSetting("system",
+                                        () -> DisguisesMod.CONFIG.disguiseNamesInDeathMessages,
+                                        value -> DisguisesMod.CONFIG.disguiseNamesInDeathMessages = value))
+                                // Kept as an alias for the first test build of this feature.
+                                .then(booleanSetting("death",
+                                        () -> DisguisesMod.CONFIG.disguiseNamesInDeathMessages,
+                                        value -> DisguisesMod.CONFIG.disguiseNamesInDeathMessages = value))
+                                .then(booleanSetting("hover",
+                                        () -> DisguisesMod.CONFIG.revealRealNameOnHover,
+                                        value -> DisguisesMod.CONFIG.revealRealNameOnHover = value))
+                        )
+
                         // /disguises observer <target> <viewer> <type> [flags]
                         // Sets an observer-specific disguise: <viewer> sees <target> as <type>
                         .then(Commands.literal("observer")
@@ -145,7 +169,15 @@ public class DisguisesAdminCommand {
                                 .then(Commands.argument("target", EntityArgument.entity())
                                         .executes(ctx -> {
                                             Entity target = EntityArgument.getEntity(ctx, "target");
-                                            DisguiseManager.INSTANCE.clearObserverDisguises(target);
+                                            Set<UUID> affectedObservers = DisguiseManager.INSTANCE
+                                                    .clearObserverDisguisesAndGetObservers(target);
+                                            for (UUID observerUUID : affectedObservers) {
+                                                ServerPlayer observer = ctx.getSource().getServer()
+                                                        .getPlayerList().getPlayer(observerUUID);
+                                                if (observer != null) {
+                                                    PacketInterceptor.refreshForObserver(observer, target);
+                                                }
+                                            }
                                             ctx.getSource().sendSuccess(() -> Component.literal(
                                                     "§aCleared all observer disguises for §e" + target.getUUID()), false);
                                             return 1;
@@ -153,6 +185,44 @@ public class DisguisesAdminCommand {
                                 )
                         )
         );
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> booleanSetting(
+            String name, java.util.function.BooleanSupplier getter,
+            java.util.function.Consumer<Boolean> setter) {
+        return Commands.literal(name)
+                .executes(ctx -> {
+                    boolean enabled = getter.getAsBoolean();
+                    ctx.getSource().sendSuccess(() -> Component.literal(
+                            "§e" + name + " §7is " + state(enabled) + "§7."), false);
+                    return enabled ? 1 : 0;
+                })
+                .then(Commands.literal("on")
+                        .executes(ctx -> setBooleanSetting(ctx.getSource(), name, true, setter)))
+                .then(Commands.literal("off")
+                        .executes(ctx -> setBooleanSetting(ctx.getSource(), name, false, setter)));
+    }
+
+    private static int setBooleanSetting(CommandSourceStack source, String name, boolean value,
+                                         java.util.function.Consumer<Boolean> setter) {
+        setter.accept(value);
+        DisguisesMod.CONFIG.save();
+        source.sendSuccess(() -> Component.literal(
+                "§aDisguise name setting §e" + name + " §ais now " + state(value) + "§a."), true);
+        return 1;
+    }
+
+    private static int showNameSettings(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal(
+                "§aDisguise name settings:\n"
+                        + "§7- chat: " + state(DisguisesMod.CONFIG.disguiseNamesInChat) + "\n"
+                        + "§7- system: " + state(DisguisesMod.CONFIG.disguiseNamesInDeathMessages) + "\n"
+                        + "§7- hover: " + state(DisguisesMod.CONFIG.revealRealNameOnHover)), false);
+        return 1;
+    }
+
+    private static String state(boolean enabled) {
+        return enabled ? "§aon" : "§coff";
     }
 
     private static int setObserverDisguise(CommandSourceStack source, Entity target,

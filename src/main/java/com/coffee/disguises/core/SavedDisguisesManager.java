@@ -1,6 +1,7 @@
 package com.coffee.disguises.core;
 
 import com.coffee.disguises.DisguisesMod;
+import com.coffee.disguises.util.JsonFiles;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -44,26 +45,48 @@ public class SavedDisguisesManager {
         load();
     }
 
-    /** Save a preset for a player. */
-    public void save(UUID playerUuid, String name, String disguiseString) {
-        data.computeIfAbsent(playerUuid, k -> new LinkedHashMap<>())
-                .put(name.toLowerCase(), disguiseString);
+    /**
+     * Save a preset for a player.
+     *
+     * @param maxPresets per-player cap, or 0 for unlimited. Overwriting an existing
+     *                   preset is always permitted, so hitting the cap never makes
+     *                   a player's current presets uneditable.
+     * @return false if the cap would be exceeded by adding a new preset.
+     */
+    public boolean save(UUID playerUuid, String name, String disguiseString, int maxPresets) {
+        String key = key(name);
+        Map<String, String> playerData = data.get(playerUuid);
+        if (playerData != null && maxPresets > 0
+                && playerData.size() >= maxPresets && !playerData.containsKey(key)) {
+            return false;
+        }
+        data.computeIfAbsent(playerUuid, k -> new LinkedHashMap<>()).put(key, disguiseString);
         persist();
+        return true;
     }
 
     /** Get a preset for a player, or null if not found. */
     public String get(UUID playerUuid, String name) {
         Map<String, String> playerData = data.get(playerUuid);
-        return playerData != null ? playerData.get(name.toLowerCase()) : null;
+        return playerData != null ? playerData.get(key(name)) : null;
     }
 
     /** Delete a preset for a player. Returns true if it existed. */
     public boolean delete(UUID playerUuid, String name) {
         Map<String, String> playerData = data.get(playerUuid);
         if (playerData == null) return false;
-        boolean removed = playerData.remove(name.toLowerCase()) != null;
+        boolean removed = playerData.remove(key(name)) != null;
         if (removed) persist();
         return removed;
+    }
+
+    /**
+     * Preset names are case-insensitive. Locale.ROOT rather than the default
+     * locale: under a Turkish locale "I".toLowerCase() is "ı", which would make
+     * a preset saved on one server unreachable on another.
+     */
+    private static String key(String name) {
+        return name.toLowerCase(Locale.ROOT);
     }
 
     /** List all preset names for a player. */
@@ -79,8 +102,8 @@ public class SavedDisguisesManager {
         for (Map.Entry<UUID, Map<String, String>> e : data.entrySet()) {
             jsonMap.put(e.getKey().toString(), e.getValue());
         }
-        try (Writer w = Files.newBufferedWriter(SAVE_PATH)) {
-            GSON.toJson(jsonMap, w);
+        try {
+            JsonFiles.write(SAVE_PATH, GSON, jsonMap);
         } catch (Exception e) {
             DisguisesMod.LOGGER.error("Failed to save disguise presets", e);
         }

@@ -2,6 +2,12 @@
 # and submitted pull request. This can help catch issues that only occur on
 # certain platforms or Java versions, and provides a first line of defence
 # against bad commits.
+#
+# All three Minecraft targets are built. The legacy targets compile the same
+# src/main/java as the primary build, with 26.2-only symbols rewritten by
+# gradle/legacy-sources.gradle — so a change that breaks that rewrite (a new
+# 26.2-only API call, an unguarded enum entry) fails here rather than shipping
+# a broken legacy jar. Building only the primary target would not catch it.
 
 name: build
 on: [pull_request, push]
@@ -19,12 +25,37 @@ jobs:
         with:
           java-version: '25'
           distribution: 'microsoft'
+      - name: cache gradle and loom
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: build
+
+      - name: build (minecraft 26.2)
         run: ./gradlew build
+
+      - name: build (minecraft 1.21.11)
+        run: ./gradlew -p versions/1.21.11 build
+
+      - name: build (minecraft 26.1.2)
+        run: ./gradlew -p versions/26.1.2 build
+
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Artifacts
-          path: build/libs/
+          path: |
+            build/libs/
+            versions/1.21.11/build/libs/
+            versions/26.1.2/build/libs/
+      - name: capture test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/
