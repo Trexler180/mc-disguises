@@ -115,9 +115,10 @@ public abstract class EntityDataUpdateMixin {
         // ── ClientboundRemoveEntitiesPacket ──────────────────────────────────
         // Suppress vanish-mod remove packets that would destroy an alive,
         // in-view disguised entity on the observer's client.  Allow legitimate
-        // removes (entity dead/removed, or now out of the observer's view due
-        // to long teleport, chunk unload, dimension change, disconnect) so the
-        // disguise visual doesn't stick around at the old location.
+        // removes (entity dead/removed, or out of vanilla's tracking range for
+        // this observer: walked away, render distance, chunk unload, dimension
+        // change, disconnect) so the disguise visual doesn't stick around at the
+        // old location.
         //
         // SENDING_DISGUISE_REMOVE: if our own code sent this packet (controlled
         // respawn, undisguise, self-view), it must pass through untouched.
@@ -130,11 +131,11 @@ public abstract class EntityDataUpdateMixin {
             for (int entityId : removePacket.getEntityIds()) {
                 Entity removed = serverLevel.getEntity(entityId);
                 // Suppress only if the entity is alive + disguised AND the
-                // observer should still see it (same level, within ~tracking
-                // range).  We do NOT check isVanishedFrom here: vanish mods
-                // often send the remove packet BEFORE setting the vanished
-                // flag, causing a timing race where the check would incorrectly
-                // pass the packet.
+                // observer should still see it.  isVanishedFrom is checked, but
+                // it cannot be relied on alone: vanish mods often send the remove
+                // BEFORE setting their vanished flag.  If this lets such a remove
+                // be suppressed, PacketInterceptor.syncVanishedDisguisedPositions
+                // sees the flag on the next tick and removes the entity itself.
                 if (removed != null && removed.isAlive()
                         && DisguiseManager.INSTANCE.isDisguised(removed)
                         && disguises$observerStillInView(observer, removed)) {
@@ -385,17 +386,19 @@ public abstract class EntityDataUpdateMixin {
     }
 
     /**
-     * Approximates whether the observer should still see this entity, i.e.
-     * whether vanilla's chunk tracker would consider it in range.  Used to
-     * decide whether a RemoveEntities packet for a disguised entity is a
-     * legitimate untrack (allow) or a vanish-mod-induced hide (suppress).
+     * Whether the observer should still see this entity despite vanilla untracking
+     * it.  Used to decide whether a RemoveEntities packet for a disguised entity is
+     * a legitimate untrack (allow) or a vanish-mod-induced hide (suppress).
      *
-     * The 128-block range matches the largest vanilla entity tracking range
-     * (and the mod's own refreshForNearbyPlayers radius), so anything outside
-     * it is definitely out of view.
+     * This must match vanilla's own range test exactly.  It used to be a fixed 128
+     * blocks, wider than most entity tracking ranges and any low render distance,
+     * so ordinary out-of-range removes were swallowed and the client kept a frozen
+     * copy of the entity forever.
      */
     private static boolean disguises$observerStillInView(ServerPlayer observer, Entity entity) {
-        if (entity.level() != observer.level()) return false;
-        return observer.distanceToSqr(entity) <= 128.0 * 128.0;
+        // Vanilla hides spectating players from non-spectators on purpose.
+        if (entity instanceof ServerPlayer player && player.isSpectator()) return false;
+        if (com.coffee.disguises.compat.VanishCompat.isVanishedFrom(entity, observer)) return false;
+        return com.coffee.disguises.packet.PacketInterceptor.isWithinVanillaTrackingRange(observer, entity);
     }
 }

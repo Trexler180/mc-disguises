@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-export PATH=$JAVA_HOME/bin:$PATH
+# Uses the JDK from the environment; the Gradle toolchain in build.gradle
+# selects (or provisions) the Java 25 compiler the mod actually needs.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 

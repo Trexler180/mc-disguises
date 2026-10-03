@@ -105,19 +105,7 @@ public class SkinFetcher {
         }
         OnlineIdentity snapshot = onlineIdentity;
 
-        IN_FLIGHT.computeIfAbsent(key, k ->
-                        CompletableFuture.supplyAsync(() -> resolveByName(name, snapshot), EXECUTOR)
-                                .orTimeout(20, TimeUnit.SECONDS)
-                                .exceptionally(e -> {
-                                    DisguisesMod.LOGGER.warn("Disguises: skin fetch for '{}' failed: {}",
-                                            name, rootMessage(e));
-                                    return null;
-                                })
-                                .whenComplete((p, e) -> IN_FLIGHT.remove(k)))
-                .thenAccept(p -> server.execute(() -> {
-                    if (hasTextures(p)) CACHE.put(key, p);
-                    cb.accept(p);
-                }));
+        fetchDeduplicated(key, () -> resolveByName(name, snapshot), "'" + name + "'", server, cb);
     }
 
     public static void fetchByUUID(UUID uuid, MinecraftServer server, Consumer<GameProfile> cb) {
@@ -146,19 +134,33 @@ public class SkinFetcher {
         }
         OnlineIdentity snapshot = onlineIdentity;
 
-        IN_FLIGHT.computeIfAbsent(key, k ->
-                        CompletableFuture.supplyAsync(() -> resolveByUUID(uuid, snapshot), EXECUTOR)
-                                .orTimeout(20, TimeUnit.SECONDS)
-                                .exceptionally(e -> {
-                                    DisguisesMod.LOGGER.warn("Disguises: skin fetch for UUID {} failed: {}",
-                                            uuid, rootMessage(e));
-                                    return null;
-                                })
-                                .whenComplete((p, e) -> IN_FLIGHT.remove(k)))
-                .thenAccept(p -> server.execute(() -> {
-                    if (hasTextures(p)) CACHE.put(key, p);
-                    cb.accept(p);
-                }));
+        fetchDeduplicated(key, () -> resolveByUUID(uuid, snapshot), "UUID " + uuid, server, cb);
+    }
+
+    /**
+     * Runs {@code resolver} on the fetch pool, sharing one in-flight request per key,
+     * and delivers the result (null on failure) to {@code cb} on the server thread.
+     */
+    private static void fetchDeduplicated(String key, java.util.function.Supplier<GameProfile> resolver,
+                                          String what, MinecraftServer server, Consumer<GameProfile> cb) {
+        CompletableFuture<GameProfile> future = IN_FLIGHT.computeIfAbsent(key, k ->
+                CompletableFuture.supplyAsync(resolver, EXECUTOR)
+                        .orTimeout(20, TimeUnit.SECONDS)
+                        .exceptionally(e -> {
+                            DisguisesMod.LOGGER.warn("Disguises: skin fetch for {} failed: {}",
+                                    what, rootMessage(e));
+                            return null;
+                        }));
+        // Attached outside computeIfAbsent on purpose.  If the fetch has already
+        // finished (a fast failure), whenComplete runs inline, and removing the key
+        // from inside computeIfAbsent's own mapping function throws
+        // IllegalStateException("Recursive update").  remove(key, future) is
+        // idempotent, so every caller sharing the future may attach it.
+        future.whenComplete((p, e) -> IN_FLIGHT.remove(key, future));
+        future.thenAccept(p -> server.execute(() -> {
+            if (hasTextures(p)) CACHE.put(key, p);
+            cb.accept(p);
+        }));
     }
 
     public static void clearCache() {

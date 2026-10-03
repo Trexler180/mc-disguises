@@ -7,6 +7,7 @@ import com.coffee.disguises.disguise.Disguise;
 import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.disguise.PlayerDisguise;
 import com.coffee.disguises.event.DisguiseEvents;
+import com.coffee.disguises.util.PlayerNames;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.server.MinecraftServer;
@@ -222,29 +223,26 @@ public class PacketInterceptor {
             if (!dr.observer().isAlive() || dr.observer().isRemoved()) return true;
             if (!dr.entity().isAlive()) return true;
 
-            com.coffee.disguises.disguise.Disguise disguise =
-                    com.coffee.disguises.core.DisguiseManager.INSTANCE.getDisguise(dr.entity());
+            // Re-resolve what this observer should see *now*.  The resend was queued
+            // for a player disguise 3 ticks ago; if the entity has since been
+            // undisguised or switched to another type, the client entity is no longer
+            // a player, and pushing player-layout data at it (with the filter bypass
+            // set) is a type mismatch that disconnects the observer.  The respawn that
+            // replaced the player disguise already sent the correct metadata.
+            Disguise disguise = DisguiseManager.INSTANCE.getDisguiseForObserver(
+                    dr.entity(), dr.observer().getUUID());
+            if (disguise == null) disguise = DisguiseManager.INSTANCE.getDisguise(dr.entity());
+            if (!(disguise instanceof PlayerDisguise)) return true;
 
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values;
-            if (disguise != null
-                    && disguise.getType() == com.coffee.disguises.disguise.DisguiseType.PLAYER
-                    && !(dr.entity() instanceof ServerPlayer)) {
-                // For mob-as-player, copy Player-specific data values (skin parts, etc.)
-                // from any real online player so the outer layers render correctly.
-                values = null;
-                for (ServerPlayer rp : server.getPlayerList().getPlayers()) {
-                    if (rp == dr.observer()) continue;
-                    List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> rpValues =
-                            rp.getEntityData().getNonDefaultValues();
-                    if (rpValues != null && !rpValues.isEmpty()) {
-                        values = rpValues.stream()
-                                .filter(v -> v.id() > 14)
-                                .collect(java.util.stream.Collectors.toList());
-                        break;
-                    }
-                }
-            } else {
+            if (dr.entity() instanceof ServerPlayer) {
+                // Real player as player: its own tracker already has Player layout.
                 values = dr.entity().getEntityData().getNonDefaultValues();
+            } else {
+                // Mob as player: the mob's own data past the LivingEntity range has the
+                // wrong layout, so resend the disguise's synthesized metadata instead
+                // (it carries the skin-layer byte that this resend exists to deliver).
+                values = MetadataBuilder.build(disguise.getWatcher(), disguise.getType(), dr.entity());
             }
 
             if (values != null && !values.isEmpty()) {
@@ -1048,9 +1046,9 @@ public class PacketInterceptor {
     /**
      * Server-side cleanup of all per-observer state for a disguised entity that is
      * leaving view (disconnect, dimension change, despawn, undisguise).  Removes
-     * lingering injected fake tab profiles from every online observer and clears
-     * any deferred position-sync state.  Safe to call regardless of whether the
-     * entity is still attached to a level.
+     * lingering injected fake tab profiles from every online observer, and removes
+     * the entity from clients the vanish position sync had put it on.  Safe to call
+     * regardless of whether the entity is still attached to a level.
      */
     public static void cleanupForRemovedEntity(MinecraftServer server, UUID entityUUID) {
         if (server != null) {
@@ -1064,7 +1062,9 @@ public class PacketInterceptor {
         // Remove any stale entries for observers that may have disconnected.
         injectedTabEntries.values().forEach(m -> m.remove(entityUUID));
         injectedTabEntries.entrySet().removeIf(e -> e.getValue().isEmpty());
-        lastSyncPos.remove(entityUUID);
+        // Observers the vanish sync was maintaining by hand are outside vanilla's
+        // seenBy, so vanilla's own remove (despawn, disconnect) never reaches them.
+        removeFromManuallySyncedObservers(server, entityUUID);
         // pendingTabRemove entries need no cleanup here: clearInjectedTabEntry above
         // already sent the live PlayerInfoRemove for every online observer.
     }
@@ -1131,14 +1131,15 @@ public class PacketInterceptor {
     /**
      * Resolves the name to put on a player-disguise GameProfile.
      *
-     * Returns {@code fallback} when no custom name is set.  Otherwise returns the
-     * custom name truncated to 16 characters: the client decodes player profile names
-     * with {@code FriendlyByteBuf.readUtf(16)} and disconnects on anything longer, so
-     * an over-length custom name would kick every observer.
+     * Returns {@code fallback} when no custom name is set, otherwise the custom name.
+     * Either way the result goes through {@link PlayerNames#forProfile}: the client
+     * decodes player profile names with a 16-character limit and disconnects on
+     * anything longer, so an over-length name — custom, typed as the skin name, or
+     * returned by a Bedrock lookup — would kick every observer.
      */
     private static String resolveProfileName(String customName, String fallback) {
-        if (customName == null || customName.isEmpty()) return fallback;
-        return customName.length() > 16 ? customName.substring(0, 16) : customName;
+        String name = (customName == null || customName.isEmpty()) ? fallback : customName;
+        return PlayerNames.forProfile(name);
     }
 
     // =========================================================================
@@ -1212,8 +1213,9 @@ public class PacketInterceptor {
     }
 
     private static GameProfile buildDefaultProfile(String name) {
-        UUID uuid = UUID.nameUUIDFromBytes(("DisguisesFake:" + name).getBytes());
-        return new GameProfile(uuid, name);
+        String safeName = PlayerNames.forProfile(name);
+        UUID uuid = UUID.nameUUIDFromBytes(("DisguisesFake:" + safeName).getBytes());
+        return new GameProfile(uuid, safeName);
     }
 
     // =========================================================================
@@ -1327,8 +1329,14 @@ public class PacketInterceptor {
     // =========================================================================
 
     /**
-     * Sends Remove + (disguised or vanilla) spawn packets to all players in range.
-     * Also refreshes the disguised player themselves if isSelfDisguise is set.
+     * Sends Remove + (disguised or vanilla) spawn packets to every observer whose
+     * client currently has this entity: those vanilla tracks, plus those the vanish
+     * position sync is maintaining by hand.  Also refreshes the disguised player
+     * themselves if isSelfDisguise is set.
+     *
+     * Observers outside that set are skipped on purpose.  Spawning the entity on a
+     * client vanilla does not track leaves a ghost there, because vanilla only sends
+     * its eventual remove to the observers it tracks.
      *
      * @param entity  the entity whose disguise changed
      * @param disguise the new disguise, or null to restore vanilla appearance
@@ -1337,19 +1345,24 @@ public class PacketInterceptor {
         if (!(entity.level() instanceof ServerLevel level)) return;
         MinecraftServer server = level.getServer();
         if (server == null) return;
-        double rangeSq = 128.0 * 128.0;
+
+        java.util.Set<net.minecraft.server.network.ServerPlayerConnection> seenBy =
+                getVanillaSeenBy(entity, level);
+        ConcurrentHashMap<UUID, long[]> manual = lastSyncPos.get(entity.getUUID());
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            boolean isSelf = player == entity;
-
             // For the player themselves:
             //   - if selfDisguise is on, apply self-view separately (applySelfView / removeSelfView)
             //   - standard entity refresh path skips self to avoid corrupting the client's
             //     LocalPlayer object
-            if (isSelf) continue;
+            if (player == entity) continue;
 
-            if (!player.level().dimension().equals(level.dimension())) continue;
-            if (player.distanceToSqr(entity) > rangeSq) continue;
+            boolean vanillaTracks = seenBy != null
+                    ? seenBy.contains(player.connection)
+                    : isWithinVanillaTrackingRange(player, entity);
+            long[] last = manual != null ? manual.get(player.getUUID()) : null;
+            boolean manuallySynced = !vanillaTracks && isSyncSnapshot(last);
+            if (!vanillaTracks && !manuallySynced) continue;
 
             SENDING_DISGUISE_REMOVE.set(true);
             try { player.connection.send(new ClientboundRemoveEntitiesPacket(entity.getId())); }
@@ -1365,6 +1378,18 @@ public class PacketInterceptor {
             removeNametagHideTeam(player, entity.getUUID());
             if (disguise != null) {
                 sendDisguisedSpawn(player, entity, disguise);
+                if (manuallySynced) {
+                    // Keep the sync loop's view of this client accurate: sendDisguisedSpawn
+                    // sends nothing when the entity is vanished from this observer.
+                    manual.put(player.getUUID(), VanishCompat.isVanishedFrom(entity, player)
+                            ? HIDDEN : syncSnapshot(entity));
+                }
+            } else if (manuallySynced) {
+                // Vanilla is not tracking this entity for them — in practice because a
+                // vanish mod hides it — so the disguise was the only thing they could
+                // see.  Undisguising must not reveal the real entity: the remove above
+                // is the whole refresh.
+                manual.remove(player.getUUID());
             } else {
                 sendVanillaRespawn(player, entity);
             }
@@ -1395,98 +1420,217 @@ public class PacketInterceptor {
      * packets to those observers, so the disguise entity freezes on their client.
      *
      * This method detects exactly which observers vanilla has stopped tracking
-     * (by reading ChunkMap.TrackedEntity.seenBy via mixin accessor) and manually
-     * sends compact delta-position + head-rotation packets to those observers
-     * every tick.
+     * (by reading ChunkMap.TrackedEntity.seenBy via mixin accessor) even though they
+     * are within vanilla's tracking range, and manually sends compact delta-position
+     * + head-rotation packets to those observers every tick.
      *
      * This approach works regardless of which vanish mod is used — it detects
      * the effect (observer removed from vanilla tracking) rather than relying on
-     * a VanishProvider integration.
+     * a VanishProvider integration.  Where a VanishProvider does report the entity
+     * as hidden from an observer, that wins: the entity is removed from their client.
+     *
+     * Because vanilla only ever sends removes to its own seenBy set, every client
+     * this method puts the entity on is also this method's to clean up — when the
+     * observer leaves range, or the entity dies, unloads or logs out.  Missing that
+     * cleanup is what used to leave frozen ghosts behind.
      */
     public static void syncVanishedDisguisedPositions(MinecraftServer server) {
-        // Remove stale entries for entities that are no longer disguised.
-        lastSyncPos.keySet().removeIf(
-                uuid -> !com.coffee.disguises.core.DisguiseManager.INSTANCE.isDisguised(uuid));
+        // Entities no longer disguised were cleaned up by their undisguise path
+        // (refreshForNearbyPlayers / cleanupForRemovedEntity); just drop the state.
+        lastSyncPos.keySet().removeIf(uuid -> !DisguiseManager.INSTANCE.isDisguised(uuid));
 
-        double rangeSq = 128.0 * 128.0;
-
-        for (UUID uuid : com.coffee.disguises.core.DisguiseManager.INSTANCE.getAllDisguisedUUIDs()) {
+        for (UUID uuid : DisguiseManager.INSTANCE.getAllDisguisedUUIDs()) {
             // Find the entity across all loaded levels.
             Entity entity = null;
             for (ServerLevel lvl : server.getAllLevels()) {
                 entity = lvl.getEntity(uuid);
                 if (entity != null) break;
             }
-            if (entity == null || !entity.isAlive()) { lastSyncPos.remove(uuid); continue; }
+            if (entity == null || !entity.isAlive()) {
+                removeFromManuallySyncedObservers(server, uuid);
+                continue;
+            }
             if (!(entity.level() instanceof ServerLevel level)) continue;
 
-            Disguise disguise = com.coffee.disguises.core.DisguiseManager.INSTANCE.getDisguise(entity);
+            Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
             if (disguise == null) continue;
 
             // Get vanilla's seenBy set for this entity via the ChunkMapAccessor.
             // seenBy contains every ServerPlayerConnection that vanilla ServerEntity
-            // is currently broadcasting movement to.  Any observer NOT in this set
-            // is being excluded by something (a vanish mod) and needs our manual sync.
+            // is currently broadcasting movement to.
             java.util.Set<net.minecraft.server.network.ServerPlayerConnection> seenBy =
                     getVanillaSeenBy(entity, level);
 
-            // Collect observers in range who are NOT in vanilla's seenBy.
+            // Vanilla hides spectating players from non-spectators on purpose
+            // (GameModeChangeMixin shows them the vanilla entity for that reason);
+            // that untrack must not be mistaken for a vanish and resynced.
+            boolean spectating = entity instanceof ServerPlayer sp && sp.isSpectator();
+
+            ConcurrentHashMap<UUID, long[]> perObserver = lastSyncPos.get(uuid);
+
+            // Observers within vanilla's range that vanilla is NOT tracking are ours.
+            // Everyone else is not: drop their state, and take the entity off any
+            // client we had put it on that vanilla will never clean up.
             List<ServerPlayer> targets = new ArrayList<>();
             for (ServerPlayer observer : server.getPlayerList().getPlayers()) {
                 if (observer == entity) continue;
-                if (!observer.level().dimension().equals(level.dimension())) continue;
-                if (observer.distanceToSqr(entity) > rangeSq) continue;
-                // If vanilla is already sending movement to this observer, skip.
-                if (seenBy != null && seenBy.contains(observer.connection)) continue;
-                targets.add(observer);
+                boolean vanillaTracks = seenBy != null && seenBy.contains(observer.connection);
+                if (!vanillaTracks && !spectating && isWithinVanillaTrackingRange(observer, entity)) {
+                    targets.add(observer);
+                    continue;
+                }
+                long[] last = perObserver != null ? perObserver.remove(observer.getUUID()) : null;
+                // If vanilla tracks them now, its pairing already re-sent the entity.
+                // If they changed level, their client dropped it with the old level.
+                if (isSyncSnapshot(last) && !vanillaTracks && observer.level() == entity.level()) {
+                    sendControlledRemove(observer, entity.getId());
+                }
             }
 
-            if (targets.isEmpty()) { lastSyncPos.remove(uuid); continue; }
+            if (targets.isEmpty()) {
+                if (perObserver != null && perObserver.isEmpty()) lastSyncPos.remove(uuid, perObserver);
+                continue;
+            }
 
-            ConcurrentHashMap<UUID, long[]> perObserver =
-                    lastSyncPos.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>());
+            if (perObserver == null) {
+                perObserver = lastSyncPos.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>());
+            }
 
-            long fx = (long) Math.floor(entity.getX() * 4096.0);
-            long fy = (long) Math.floor(entity.getY() * 4096.0);
-            long fz = (long) Math.floor(entity.getZ() * 4096.0);
+            long[] now = syncSnapshot(entity);
             byte yRot     = (byte) ((int) (entity.getYRot()     * 256.0F / 360.0F));
             byte xRot     = (byte) ((int) (entity.getXRot()     * 256.0F / 360.0F));
             byte headYRot = (byte) ((int) (entity.getYHeadRot() * 256.0F / 360.0F));
 
-            final Entity   fe = entity;
-            final Disguise fd = disguise;
-
             for (ServerPlayer observer : targets) {
                 long[] last = perObserver.get(observer.getUUID());
-                long dx = last != null ? fx - last[0] : 0;
-                long dy = last != null ? fy - last[1] : 0;
-                long dz = last != null ? fz - last[2] : 0;
 
-                boolean bigJump = last == null
+                if (VanishCompat.isVanishedFrom(entity, observer)) {
+                    // A VanishProvider hides the entity from this observer.  Take it off
+                    // their client once; this also covers a remove EntityDataUpdateMixin
+                    // suppressed because the vanish mod sent it before setting its flag.
+                    if (last != HIDDEN) {
+                        sendControlledRemove(observer, entity.getId());
+                        perObserver.put(observer.getUUID(), HIDDEN);
+                    }
+                    continue;
+                }
+
+                boolean known = isSyncSnapshot(last);
+                long dx = known ? now[0] - last[0] : 0;
+                long dy = known ? now[1] - last[1] : 0;
+                long dz = known ? now[2] - last[2] : 0;
+
+                boolean bigJump = !known
                         || Math.abs(dx) > Short.MAX_VALUE
                         || Math.abs(dy) > Short.MAX_VALUE
                         || Math.abs(dz) > Short.MAX_VALUE;
 
                 if (bigJump) {
-                    // First appearance or teleport: do a clean respawn of the disguise.
-                    SENDING_DISGUISE_REMOVE.set(true);
-                    try { observer.connection.send(new ClientboundRemoveEntitiesPacket(fe.getId())); }
-                    finally { SENDING_DISGUISE_REMOVE.set(false); }
-                    sendDisguisedSpawn(observer, fe, fd);
-                    observer.connection.send(new ClientboundRotateHeadPacket(fe, headYRot));
+                    // First appearance, reappearance after a vanish, or teleport:
+                    // do a clean respawn of the disguise.
+                    sendControlledRemove(observer, entity.getId());
+                    sendDisguisedSpawn(observer, entity, disguise);
+                    observer.connection.send(new ClientboundRotateHeadPacket(entity, headYRot));
                 } else if (dx != 0 || dy != 0 || dz != 0) {
                     observer.connection.send(new ClientboundMoveEntityPacket.PosRot(
-                            fe.getId(), (short) dx, (short) dy, (short) dz,
-                            yRot, xRot, fe.onGround()));
-                    observer.connection.send(new ClientboundRotateHeadPacket(fe, headYRot));
+                            entity.getId(), (short) dx, (short) dy, (short) dz,
+                            yRot, xRot, entity.onGround()));
+                    observer.connection.send(new ClientboundRotateHeadPacket(entity, headYRot));
                 } else {
                     observer.connection.send(new ClientboundMoveEntityPacket.Rot(
-                            fe.getId(), yRot, xRot, fe.onGround()));
-                    observer.connection.send(new ClientboundRotateHeadPacket(fe, headYRot));
+                            entity.getId(), yRot, xRot, entity.onGround()));
+                    observer.connection.send(new ClientboundRotateHeadPacket(entity, headYRot));
                 }
-                perObserver.put(observer.getUUID(), new long[]{fx, fy, fz});
+                perObserver.put(observer.getUUID(), now);
             }
         }
+    }
+
+    /**
+     * Marker stored in {@link #lastSyncPos} for an observer we deliberately took the
+     * entity away from because it is vanished from them.  Distinguishes "client has
+     * nothing, already removed" from "never synced" (null) so the remove is sent once.
+     */
+    private static final long[] HIDDEN = new long[0];
+
+    /**
+     * Per-observer sync state for a client that has the entity:
+     * {fixed-point x, y, z, entity id}.  The id is kept so the entity can still be
+     * removed from that client after it has left every level.
+     */
+    private static long[] syncSnapshot(Entity entity) {
+        return new long[]{
+                (long) Math.floor(entity.getX() * 4096.0),
+                (long) Math.floor(entity.getY() * 4096.0),
+                (long) Math.floor(entity.getZ() * 4096.0),
+                entity.getId()
+        };
+    }
+
+    /** Whether this sync state means the observer's client currently has the entity. */
+    private static boolean isSyncSnapshot(long[] state) {
+        return state != null && state.length == 4;
+    }
+
+    private static void sendControlledRemove(ServerPlayer observer, int entityId) {
+        SENDING_DISGUISE_REMOVE.set(true);
+        try { observer.connection.send(new ClientboundRemoveEntitiesPacket(entityId)); }
+        finally { SENDING_DISGUISE_REMOVE.set(false); }
+    }
+
+    /**
+     * Removes the entity from every client the vanish sync had put it on and drops
+     * its sync state.  Vanilla's own remove never reaches those clients, since they
+     * are by definition not in its seenBy set.
+     */
+    private static void removeFromManuallySyncedObservers(MinecraftServer server, UUID entityUUID) {
+        ConcurrentHashMap<UUID, long[]> perObserver = lastSyncPos.remove(entityUUID);
+        if (perObserver == null || server == null) return;
+        perObserver.forEach((observerUUID, state) -> {
+            if (!isSyncSnapshot(state)) return;
+            ServerPlayer observer = server.getPlayerList().getPlayer(observerUUID);
+            if (observer != null) sendControlledRemove(observer, (int) state[3]);
+        });
+    }
+
+    /**
+     * Whether vanilla's entity tracker would pair {@code observer} with {@code entity}
+     * on distance grounds — mirroring {@code ChunkMap.TrackedEntity.updatePlayer}:
+     * horizontal distance within min(scaled type range incl. passengers, the player's
+     * view distance), and the entity's chunk tracked by the player.
+     *
+     * Deliberately omits {@code Entity.broadcastToPlayer}, the hook vanish mods use.
+     * The mod's contract is that a vanished-but-disguised entity stays visible as its
+     * disguise (unless a {@link com.coffee.disguises.compat.VanishProvider} says otherwise), so a
+     * vanish-induced untrack must still read as "in range" here.
+     *
+     * Every "should this observer see it" decision uses this rather than a fixed
+     * radius.  A fixed 128 blocks is wider than most entity ranges (items 96, most
+     * defaults 80, arrows 64) and than any low client render distance; the gap is
+     * where observers were sent — or kept — entities vanilla would never remove,
+     * leaving frozen ghosts on their client.
+     */
+    public static boolean isWithinVanillaTrackingRange(ServerPlayer observer, Entity entity) {
+        if (entity.level() != observer.level()) return false;
+        if (!(entity.level() instanceof ServerLevel level)) return false;
+
+        int range = entity.getType().clientTrackingRange() * 16;
+        for (Entity passenger : entity.getIndirectPassengers()) {
+            range = Math.max(range, passenger.getType().clientTrackingRange() * 16);
+        }
+        range = level.getServer().getScaledTrackingDistance(range);
+
+        net.minecraft.server.level.ChunkMap chunkMap = level.getChunkSource().chunkMap;
+        int viewRange = ((com.coffee.disguises.mixin.ChunkMapAccessor) chunkMap)
+                .disguises$getPlayerViewDistance(observer) * 16;
+        double maxDist = Math.min(range, viewRange);
+
+        double dx = observer.getX() - entity.getX();
+        double dz = observer.getZ() - entity.getZ();
+        if (dx * dx + dz * dz > maxDist * maxDist) return false;
+
+        // Shift rather than ChunkPos.x: that is a field on 1.21.11 but a method on 26.x.
+        return chunkMap.isChunkTracked(observer, entity.getBlockX() >> 4, entity.getBlockZ() >> 4);
     }
 
     /**

@@ -44,7 +44,10 @@ replay_*.log
 issues.txt
 server_run.log
 *.log
+logs/
+DO NOT COMMIT*
 
 # IDE workspace config
 
 .claude/
+*modrinth description.txt

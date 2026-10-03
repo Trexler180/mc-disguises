@@ -119,20 +119,21 @@ public class DisguisesConfig {
     }
 
     static DisguisesConfig load(Path path) {
+        DisguisesConfig cfg = null;
         if (Files.exists(path)) {
             try (Reader r = Files.newBufferedReader(path)) {
-                DisguisesConfig cfg = GSON.fromJson(r, DisguisesConfig.class);
-                if (cfg != null) {
-                    cfg.save(path); // back-fill any new fields
-                    return cfg;
-                }
+                cfg = GSON.fromJson(r, DisguisesConfig.class);
             } catch (IOException | JsonParseException e) {
                 DisguisesMod.LOGGER.error("Failed to read disguises config, using defaults", e);
             }
         }
-        DisguisesConfig defaults = new DisguisesConfig();
-        defaults.save(path);
-        return defaults;
+        if (cfg == null) cfg = new DisguisesConfig();
+        // Back-fill any new fields.  Must happen after the reader is closed: the save
+        // replaces the file by moving a temp file over it, which Windows refuses
+        // while the file is still open ("AccessDeniedException"), so the back-fill
+        // silently never happened there.
+        cfg.save(path);
+        return cfg;
     }
 
     public void save() {

@@ -72,6 +72,9 @@ dependencies {
 
 	testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+	// Runs tests under Knot so Minecraft classes (registries, block states) can be
+	// bootstrapped — needed by DisguisePersistenceTest.
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
 
 processResources {

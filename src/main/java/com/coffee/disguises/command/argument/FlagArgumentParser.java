@@ -217,6 +217,9 @@ public class FlagArgumentParser {
                         if (sz < 1) {
                             warnings.add("'setSize' requires a positive integer (1=tiny, 2=small, 4=large).");
                         } else {
+                            if (sz > SlimeWatcher.MAX_SIZE) {
+                                warnings.add("'setSize' capped at " + SlimeWatcher.MAX_SIZE + ".");
+                            }
                             slw.setSize(sz);
                         }
                     } else {
@@ -287,8 +290,14 @@ public class FlagArgumentParser {
                 case "setphantomsize", "phantomsize", "psize" -> {
                     if (watcher instanceof PhantomWatcher phw) {
                         int sz = nextInt(tokens, i, -1);
-                        if (sz < 0) warnings.add("'setPhantomSize' requires a non-negative integer.");
-                        else phw.setSize(sz);
+                        if (sz < 0) {
+                            warnings.add("'setPhantomSize' requires a non-negative integer.");
+                        } else {
+                            if (sz > PhantomWatcher.MAX_SIZE) {
+                                warnings.add("'setPhantomSize' capped at " + PhantomWatcher.MAX_SIZE + ".");
+                            }
+                            phw.setSize(sz);
+                        }
                     } else {
                         warnings.add("'setPhantomSize' is not applicable to " + type.getId() + ".");
                     }

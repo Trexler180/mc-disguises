@@ -113,6 +113,13 @@ public class DisguisesMod implements ModInitializer {
 
         // ─── Lifecycle ────────────────────────────────────────────────────────
 
+        // Disconnect keeps the persisted entry for exactly this moment.
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            if (CONFIG.persistDisguises) {
+                DisguiseManager.INSTANCE.restorePersistedDisguise(handler.player);
+            }
+        });
+
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             if (CONFIG.persistDisguises) {
                 DisguiseManager.INSTANCE.saveDisguise(handler.player);

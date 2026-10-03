@@ -10,6 +10,7 @@ import com.coffee.disguises.disguise.PlayerDisguise;
 import com.coffee.disguises.packet.PacketInterceptor;
 import com.coffee.disguises.packet.SkinFetcher;
 import com.coffee.disguises.util.PermissionCompat;
+import com.coffee.disguises.util.PlayerNames;
 import com.coffee.disguises.watcher.FlagWatcher;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -342,6 +343,7 @@ public class DisguiseCommand {
         ServerPlayer player = source.getPlayerOrException();
 
         if (!isTypeAllowed(source, DisguiseType.PLAYER)) return 0;
+        if (!isPlayerNameValid(source, skinName)) return 0;
 
         FlagWatcher watcher = DisguiseType.PLAYER.createDefaultWatcher();
         ParseResult parsed = parseFlags(flagString, watcher, DisguiseType.PLAYER);
@@ -421,6 +423,7 @@ public class DisguiseCommand {
     private static int disguiseOtherAsPlayer(CommandSourceStack source, ServerPlayer target,
                                              String skinName, String flagString) {
         if (!isTypeAllowed(source, DisguiseType.PLAYER)) return 0;
+        if (!isPlayerNameValid(source, skinName)) return 0;
 
         FlagWatcher watcher = DisguiseType.PLAYER.createDefaultWatcher();
         ParseResult parsed = parseFlags(flagString, watcher, DisguiseType.PLAYER);
@@ -460,6 +463,7 @@ public class DisguiseCommand {
 
     private static int disguiseEntity(CommandSourceStack source, Entity target,
                                       DisguiseType type, String flagString) {
+        if (!mayDisguiseTarget(source, target)) return 0;
         if (!isTypeAllowed(source, type)) return 0;
 
         FlagWatcher watcher = type.createDefaultWatcher();
@@ -483,7 +487,9 @@ public class DisguiseCommand {
 
     private static int disguiseEntityAsPlayer(CommandSourceStack source, Entity target,
                                               String skinName, String flagString) {
+        if (!mayDisguiseTarget(source, target)) return 0;
         if (!isTypeAllowed(source, DisguiseType.PLAYER)) return 0;
+        if (!isPlayerNameValid(source, skinName)) return 0;
 
         FlagWatcher watcher = DisguiseType.PLAYER.createDefaultWatcher();
         ParseResult parsed = parseFlags(flagString, watcher, DisguiseType.PLAYER);
@@ -533,11 +539,14 @@ public class DisguiseCommand {
 
         AABB box = AABB.ofSize(source.getPosition(), radius * 2, radius * 2, radius * 2);
         List<Entity> entities = level.getEntitiesOfClass(Entity.class, box);
+        boolean mayDisguiseOthers = mayDisguiseOtherPlayers(source);
 
         int count = 0;
         for (Entity entity : entities) {
             // Don't disguise the command executor themselves via the radius command
             if (entity == source.getEntity()) continue;
+            // The radius permission alone must not reach other players.
+            if (entity instanceof ServerPlayer && !mayDisguiseOthers) continue;
 
             FlagWatcher watcher = type.createDefaultWatcher();
             ParseResult parsed = parseFlags(flagString, watcher, type);
@@ -561,15 +570,18 @@ public class DisguiseCommand {
     private static int disguiseRadiusAsPlayer(CommandSourceStack source, double radius,
                                               String skinName, String flagString) {
         if (!isTypeAllowed(source, DisguiseType.PLAYER)) return 0;
+        if (!isPlayerNameValid(source, skinName)) return 0;
 
         if (!(source.getLevel() instanceof ServerLevel level)) return 0;
 
         AABB box = AABB.ofSize(source.getPosition(), radius * 2, radius * 2, radius * 2);
         List<Entity> entities = level.getEntitiesOfClass(Entity.class, box);
+        boolean mayDisguiseOthers = mayDisguiseOtherPlayers(source);
 
         int count = 0;
         for (Entity entity : entities) {
             if (entity == source.getEntity()) continue;
+            if (entity instanceof ServerPlayer && !mayDisguiseOthers) continue;
 
             FlagWatcher watcher = DisguiseType.PLAYER.createDefaultWatcher();
             ParseResult parsed = parseFlags(flagString, watcher, DisguiseType.PLAYER);
@@ -754,6 +766,39 @@ public class DisguiseCommand {
             }
         }
         return true;
+    }
+
+    /**
+     * Rejects names that would put an invalid profile name on the wire.  The client
+     * disconnects on profile names over 16 characters, so without this check a
+     * single long name would kick every observer near the disguise.
+     */
+    private static boolean isPlayerNameValid(CommandSourceStack source, String name) {
+        if (PlayerNames.isValid(name)) return true;
+        source.sendFailure(Component.literal(
+                "§cInvalid player name §e" + name + "§c: use 1–" + PlayerNames.MAX_LENGTH
+                        + " characters with no spaces."));
+        return false;
+    }
+
+    /**
+     * The entity and radius branches accept arbitrary entities, players included.
+     * Reaching a player through them must still require the permission the
+     * dedicated player branches require, or those branches are trivially bypassed.
+     */
+    private static boolean mayDisguiseTarget(CommandSourceStack source, Entity target) {
+        if (!(target instanceof ServerPlayer)) return true;
+        boolean allowed = target == source.getEntity()
+                ? PermissionCompat.check(source, "disguises.disguise.self", DisguisesMod.CONFIG.permLevelSelf)
+                : mayDisguiseOtherPlayers(source);
+        if (!allowed) {
+            source.sendFailure(Component.literal("§cYou do not have permission to disguise that player."));
+        }
+        return allowed;
+    }
+
+    private static boolean mayDisguiseOtherPlayers(CommandSourceStack source) {
+        return PermissionCompat.check(source, "disguises.disguise.others", DisguisesMod.CONFIG.permLevelOthers);
     }
 
     private static void sendWarnings(CommandSourceStack source, List<String> warnings) {

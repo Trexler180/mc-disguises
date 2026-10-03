@@ -47,10 +47,20 @@ public class UndisguiseCommand {
                                             AABB box = AABB.ofSize(source.getPosition(),
                                                     radius * 2, radius * 2, radius * 2);
 
+                                            // The radius permission alone must not reach other
+                                            // players; that needs the same node as /undisguise <player>.
+                                            boolean mayUndisguiseOthers = PermissionCompat.check(source,
+                                                    "disguises.undisguise.others",
+                                                    DisguisesMod.CONFIG.permLevelOthers);
+
                                             int count = 0;
                                             for (Entity entity : level.getEntitiesOfClass(Entity.class, box)) {
-                                                if (DisguiseManager.INSTANCE.isDisguised(entity)) {
-                                                    DisguiseManager.INSTANCE.removeDisguise(entity, true);
+                                                if (entity instanceof ServerPlayer
+                                                        && entity != source.getEntity()
+                                                        && !mayUndisguiseOthers) continue;
+                                                // removeDisguise is false when nothing was active or a
+                                                // listener cancelled it; only count real removals.
+                                                if (DisguiseManager.INSTANCE.removeDisguise(entity, true)) {
                                                     count++;
                                                 }
                                             }

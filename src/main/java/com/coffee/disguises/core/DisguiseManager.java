@@ -5,6 +5,10 @@ import com.coffee.disguises.disguise.Disguise;
 import com.coffee.disguises.event.DisguiseEvents;
 import com.coffee.disguises.packet.PacketInterceptor;
 import com.google.gson.*;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -252,7 +256,7 @@ public class DisguiseManager {
             if (!fireBeforeEvent) {
                 observerDisguises.remove(entity.getUUID());
                 PacketInterceptor.cleanupForRemovedEntity(serverFor(entity), entity.getUUID());
-                if (removePersisted && DisguisesMod.CONFIG.persistDisguises) {
+                if (removePersisted) {
                     removePersistedDisguise(entity.getUUID());
                 }
             }
@@ -295,7 +299,10 @@ public class DisguiseManager {
 
         DisguiseEvents.AFTER_UNDISGUISE.invoker().onAfterUndisguise(entity);
         DisguisesMod.LOGGER.debug("Removed disguise from entity {}", entity.getUUID());
-        if (removePersisted && DisguisesMod.CONFIG.persistDisguises) {
+        // Not gated on persistDisguises: an entry left behind while persistence is
+        // off would resurrect this disguise the moment persistence is switched on.
+        // Costs nothing when there is no entry.
+        if (removePersisted) {
             removePersistedDisguise(entity.getUUID());
         }
         return true;
@@ -346,6 +353,13 @@ public class DisguiseManager {
         for (Map.Entry<UUID, Disguise> entry : activeDisguises.entrySet()) {
             root.add(entry.getKey().toString(), serializeDisguise(entry.getValue()));
         }
+        // An online player with no active disguise must not keep an old entry:
+        // it would bring back a disguise they no longer have on the next start.
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (!activeDisguises.containsKey(player.getUUID())) {
+                root.remove(player.getUUID().toString());
+            }
+        }
         persistDirty = true;
         flushPersisted();
         DisguisesMod.LOGGER.info("Persisted {} active disguises to disk.", activeDisguises.size());
@@ -380,13 +394,68 @@ public class DisguiseManager {
             try {
                 UUID uuid = UUID.fromString(entry.getKey());
                 JsonObject obj = entry.getValue().getAsJsonObject();
-                deserializeDisguise(obj).ifPresent(disguise -> activeDisguises.put(uuid, disguise));
+                deserializeDisguise(obj).ifPresent(disguise -> {
+                    activeDisguises.put(uuid, disguise);
+                    fetchPersistedSkin(server, uuid, disguise);
+                });
             } catch (Exception ex) {
                 DisguisesMod.LOGGER.warn("Failed to load persisted disguise entry: {}",
                         entry.getKey());
             }
         }
         DisguisesMod.LOGGER.info("Loaded {} persisted disguises.", activeDisguises.size());
+    }
+
+    /**
+     * Re-applies a player's persisted disguise when they join.  Called from the
+     * JOIN event when persistence is on.
+     *
+     * Loading only at SERVER_STARTED was not enough: disconnect detaches the active
+     * disguise but keeps the persisted entry, so relogging within the same session
+     * came back undisguised — and the disguise then reappeared after the next
+     * restart.  Going through applyDisguise also brings back the self-view puppet,
+     * which pairing alone never did.
+     */
+    public void restorePersistedDisguise(ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        // Loaded at SERVER_STARTED if the entry predates this session; take it out
+        // of the active map so applyDisguise treats this as a fresh apply.
+        Disguise disguise = activeDisguises.remove(uuid);
+        if (disguise == null) {
+            JsonElement saved = persistedRoot().get(uuid.toString());
+            if (saved == null || !saved.isJsonObject()) return;
+            disguise = deserializeDisguise(saved.getAsJsonObject()).orElse(null);
+            if (disguise == null) {
+                removePersistedDisguise(uuid);
+                return;
+            }
+            fetchPersistedSkin(serverFor(player), uuid, disguise);
+        }
+
+        if (!applyDisguise(player, disguise)) {
+            // A listener vetoed it; don't keep offering it on every login.
+            removePersistedDisguise(uuid);
+        }
+    }
+
+    /**
+     * Skins are not persisted, only the name, so a restored player disguise shows
+     * the default skin until this fetch completes and respawns it.
+     */
+    private void fetchPersistedSkin(MinecraftServer server, UUID uuid, Disguise disguise) {
+        if (server == null) return;
+        if (!(disguise instanceof com.coffee.disguises.disguise.PlayerDisguise pd) || pd.hasSkin()) return;
+        com.coffee.disguises.packet.SkinFetcher.fetchByName(pd.getDisguiseName(), server, profile -> {
+            if (profile == null || activeDisguises.get(uuid) != pd) return;
+            pd.setSkinProfile(profile);
+            for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
+                Entity entity = level.getEntity(uuid);
+                if (entity != null) {
+                    PacketInterceptor.refreshForNearbyPlayers(entity, pd);
+                    return;
+                }
+            }
+        });
     }
 
     private void removePersistedDisguise(UUID uuid) {
@@ -425,7 +494,8 @@ public class DisguiseManager {
         }
     }
 
-    private static JsonObject serializeDisguise(Disguise disguise) {
+    // Package-private (with deserializeDisguise) for DisguisePersistenceTest.
+    static JsonObject serializeDisguise(Disguise disguise) {
         JsonObject obj = new JsonObject();
         obj.addProperty("type", disguise.getType().getId());
         obj.addProperty("selfDisguise", disguise.isSelfDisguise());
@@ -437,7 +507,7 @@ public class DisguiseManager {
         return obj;
     }
 
-    private static Optional<Disguise> deserializeDisguise(JsonObject obj) {
+    static Optional<Disguise> deserializeDisguise(JsonObject obj) {
         if (obj == null || !obj.has("type")) return Optional.empty();
         String typeId = obj.get("type").getAsString();
         return com.coffee.disguises.disguise.DisguiseType.fromId(typeId).map(type -> {
@@ -493,7 +563,10 @@ public class DisguiseManager {
             try {
                 field.setAccessible(true);
                 Object decoded = decodeWatcherValue(field.getType(), value);
-                if (decoded != null || !field.getType().isPrimitive()) {
+                // null from a non-null JSON value means "could not decode" (unknown
+                // item/block, unsupported type): keep the watcher's default rather
+                // than writing a null the watcher never expects.
+                if (decoded != null || (value.isJsonNull() && !field.getType().isPrimitive())) {
                     field.set(watcher, decoded);
                 }
             } catch (Exception e) {
@@ -535,19 +608,21 @@ public class DisguiseManager {
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 if (entry.getKey() instanceof EquipmentSlot slot && entry.getValue() instanceof ItemStack stack
                         && !stack.isEmpty()) {
-                    obj.addProperty(slot.name(), stack.getItem().toString());
+                    obj.addProperty(slot.name(), itemId(stack.getItem()));
                 }
             }
             return obj;
         }
         if (value instanceof BlockState state) {
-            int id = net.minecraft.world.level.block.Block.getId(state);
-            return new JsonPrimitive(id);
+            // The full state string ("minecraft:oak_stairs[facing=north,...]"), not
+            // Block.getId: numeric state ids follow registry order, so they point at
+            // a different block as soon as the game version or mod list changes.
+            return new JsonPrimitive(BlockStateParser.serialize(state));
         }
         if (value instanceof ItemStack stack) {
             JsonObject obj = new JsonObject();
             if (!stack.isEmpty()) {
-                obj.addProperty("item", stack.getItem().toString());
+                obj.addProperty("item", itemId(stack.getItem()));
                 obj.addProperty("count", stack.getCount());
             }
             return obj;
@@ -574,7 +649,7 @@ public class DisguiseManager {
             }
         }
         if (type == BlockState.class) {
-            return net.minecraft.world.level.block.Block.stateById(element.getAsInt());
+            return parseBlockState(element);
         }
         if (Map.class.isAssignableFrom(type) && element.isJsonObject()) {
             EnumMap<EquipmentSlot, ItemStack> equipment = new EnumMap<>(EquipmentSlot.class);
@@ -599,18 +674,37 @@ public class DisguiseManager {
         return null;
     }
 
+    private static String itemId(Item item) {
+        return BuiltInRegistries.ITEM.getKey(item).toString();
+    }
+
+    /**
+     * Resolves a persisted item id through the registry.  This used to reflect on
+     * {@code Items} field names, which only exist under their Mojang names in dev and
+     * on unobfuscated targets — on the remapped 1.21.11 jar every lookup failed and
+     * saved equipment silently vanished — and it dropped the namespace, so modded
+     * items could never resolve.  Bare names from older files get "minecraft:".
+     */
     private static Item parseItem(String raw) {
         if (raw == null || raw.isBlank()) return null;
-        String name = raw.toLowerCase(Locale.ROOT);
-        int colon = name.indexOf(':');
-        if (colon >= 0) name = name.substring(colon + 1);
-        String fieldName = name.toUpperCase(Locale.ROOT);
+        Identifier id = Identifier.tryParse(raw.trim().toLowerCase(Locale.ROOT));
+        if (id == null) return null;
+        return BuiltInRegistries.ITEM.getOptional(id)
+                .filter(item -> item != Items.AIR)
+                .orElse(null);
+    }
+
+    /** Accepts the current state-string format and the numeric ids older files used. */
+    private static BlockState parseBlockState(JsonElement element) {
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+            return net.minecraft.world.level.block.Block.stateById(element.getAsInt());
+        }
         try {
-            Field field = Items.class.getDeclaredField(fieldName);
-            field.setAccessible(true);
-            Object value = field.get(null);
-            return value instanceof Item item ? item : null;
-        } catch (ReflectiveOperationException e) {
+            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, element.getAsString(), false)
+                    .blockState();
+        } catch (CommandSyntaxException e) {
+            DisguisesMod.LOGGER.warn("Ignoring unknown persisted block state '{}': {}",
+                    element.getAsString(), e.getMessage());
             return null;
         }
     }
