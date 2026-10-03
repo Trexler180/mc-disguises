@@ -1,20 +1,25 @@
-// Generates legacy-API copies of the handful of shared sources that reference
-// Minecraft symbols renamed in 26.2.
+// Lets every older Minecraft target build from the shared src/main/java, which is
+// written against the primary (newest) target.
+//
+// Two mechanisms, for two kinds of API difference:
+//
+//   * Token-level renames and newer-only enum entries are rewritten here, in
+//     generated copies of the handful of files that need them (LEGACY_SOURCE_FILES).
+//   * Differences in the *shape* of an API (different constructors, a different
+//     packet, a different mixin target) live in small classes with one copy in
+//     src/main/java (newest API) and one in versions/_legacy-common/src/main/java
+//     (pre-26.3 API, shared by every legacy target).  LEGACY_OVERRIDE_FILES lists
+//     them.  Keep those classes tiny and their signatures identical.
 //
 // Before this existed, versions/_legacy-common held hand-maintained duplicates of
 // DisguiseType.java, MetadataBuilder.java and PacketInterceptor.java — 3,724 lines
 // copied to change nine tokens.  Every fix to PacketInterceptor (the core of the
-// mod) had to be mirrored by hand or the legacy jars silently drifted from the
-// main one.  Now all targets compile from src/main/java and the differences are
-// applied here.
+// mod) had to be mirrored by hand or the legacy jars silently drifted.
 //
-// The whole delta between 26.2 and the older targets is:
-//   1. EntityTypes  -> EntityType          (class renamed in 26.2)
-//   2. monster.cubemob.Slime -> monster.Slime  (class moved in 26.2)
-//   3. entries guarded by //#if ... //#endif exist only in 26.2
-//
-// Consumers must add `sourceSets.main.java.exclude(...)` for LEGACY_SOURCE_FILES
-// and wire compileJava to the generated directory; see applyLegacySources() below.
+// Token rewrites, by the version that introduced the newer name:
+//   26.3: monster.EnderMan -> monster.Enderman
+//   26.2: EntityTypes -> EntityType; monster.cubemob.Slime -> monster.Slime
+// plus `//#if MC>=X` ... `//#endif` blocks, kept only when the target is >= X.
 
 ext.LEGACY_SOURCE_FILES = [
         "com/coffee/disguises/disguise/DisguiseType.java",
@@ -22,13 +27,26 @@ ext.LEGACY_SOURCE_FILES = [
         "com/coffee/disguises/packet/PacketInterceptor.java",
 ]
 
-// Rewrites one 26.2 source file into its legacy-API equivalent.
-//
-// Guarded blocks are stripped unconditionally: every target that applies this
-// script is older than 26.2, so `//#if MC>=26.2` is always false here.  If a
-// target at or above 26.2 ever needs generated sources, teach this closure to
-// actually evaluate the condition instead of assuming it.
-ext.transformLegacySource = { String source ->
+ext.LEGACY_OVERRIDE_FILES = [
+        "com/coffee/disguises/compat/PacketCompat.java",
+        "com/coffee/disguises/mixin/LivingEntitySwingMixin.java",
+]
+
+// Compares dotted Minecraft versions numerically ("26.1.2" < "26.2" < "26.3").
+ext.compareMcVersions = { String a, String b ->
+    List<Integer> pa = a.tokenize('.').collect { it as int }
+    List<Integer> pb = b.tokenize('.').collect { it as int }
+    for (int i = 0; i < Math.max(pa.size(), pb.size()); i++) {
+        int x = i < pa.size() ? pa[i] : 0
+        int y = i < pb.size() ? pb[i] : 0
+        if (x != y) return x <=> y
+    }
+    return 0
+}
+
+// Rewrites one shared source file into its equivalent for Minecraft `mcVersion`.
+ext.transformLegacySource = { String source, String mcVersion ->
+    def atLeast = { String v -> compareMcVersions(mcVersion, v) >= 0 }
     StringBuilder out = new StringBuilder(source.length())
     boolean skipping = false
     Set<String> seenImports = new HashSet<String>()
@@ -36,14 +54,25 @@ ext.transformLegacySource = { String source ->
     source.eachLine { String line ->
         String trimmed = line.trim()
 
-        if (trimmed.startsWith("//#if ")) { skipping = true; return }
+        def guard = trimmed =~ /^\/\/#if MC>=([0-9.]+)$/
+        if (guard.matches()) { skipping = !atLeast(guard.group(1)); return }
+        if (trimmed.startsWith("//#if ")) {
+            throw new GradleException("Unsupported source guard (only `//#if MC>=X`): ${trimmed}")
+        }
         if (trimmed == "//#endif") { skipping = false; return }
         if (skipping) return
 
-        // \b anchors matter: `disabledEntityTypes` must not be rewritten.
-        line = line.replaceAll(/\bEntityTypes\b/, "EntityType")
-        line = line.replace("net.minecraft.world.entity.monster.cubemob.Slime",
-                "net.minecraft.world.entity.monster.Slime")
+        if (!atLeast("26.3")) {
+            line = line.replace("net.minecraft.world.entity.monster.Enderman;",
+                    "net.minecraft.world.entity.monster.EnderMan;")
+            line = line.replaceAll(/\bEnderman\.class\b/, "EnderMan.class")
+        }
+        if (!atLeast("26.2")) {
+            // \b anchors matter: `disabledEntityTypes` must not be rewritten.
+            line = line.replaceAll(/\bEntityTypes\b/, "EntityType")
+            line = line.replace("net.minecraft.world.entity.monster.cubemob.Slime",
+                    "net.minecraft.world.entity.monster.Slime")
+        }
 
         // DisguiseType imports both EntityType and EntityTypes; after the rename
         // those collapse into the same import. Duplicates are legal Java but noisy.
@@ -55,16 +84,18 @@ ext.transformLegacySource = { String source ->
     return out.toString()
 }
 
-// Registers the generation task, excludes the 26.2-flavoured originals from the
-// main source set, and feeds the rewritten copies to javac instead.
+// Registers the generation task, excludes the newest-API originals from the main
+// source set, and feeds the rewritten copies plus the legacy overrides to javac.
 //
 // Deliberately does not touch java.srcDirs: each version build declares its own
 // (plus any per-version override directory), and quietly reassigning it here
 // would make that declaration a lie.
-ext.applyLegacySources = { String repoRoot ->
+ext.applyLegacySources = { String repoRoot, String mcVersion ->
     File sharedSrcRoot = file("${repoRoot}/src/main/java")
+    File overrideRoot = file("${repoRoot}/versions/_legacy-common/src/main/java")
     File outRoot = new File(layout.buildDirectory.get().asFile, "generated/sources/legacy/java")
     List<String> relPaths = LEGACY_SOURCE_FILES
+    List<String> overridePaths = LEGACY_OVERRIDE_FILES
 
     // Captured into locals so the doLast body below resolves them from its own
     // scope rather than walking the closure owner chain out to project.ext,
@@ -73,10 +104,11 @@ ext.applyLegacySources = { String repoRoot ->
 
     def generate = tasks.register("generateLegacySources") {
         group = "build"
-        description = "Rewrites 26.2-only API symbols so legacy targets build from the shared sources."
+        description = "Rewrites newer-only API symbols so legacy targets build from the shared sources."
 
         inputs.files(relPaths.collect { new File(sharedSrcRoot, it) })
                 .withPropertyName("sharedSources")
+        inputs.property("mcVersion", mcVersion)
         outputs.dir(outRoot).withPropertyName("generatedSources")
 
         doLast {
@@ -84,16 +116,17 @@ ext.applyLegacySources = { String repoRoot ->
             relPaths.each { String rel ->
                 File dst = new File(outRoot, rel)
                 dst.parentFile.mkdirs()
-                dst.write(transform(new File(sharedSrcRoot, rel).getText("UTF-8")), "UTF-8")
+                dst.write(transform(new File(sharedSrcRoot, rel).getText("UTF-8"), mcVersion), "UTF-8")
             }
         }
     }
 
-    // The 26.2-flavoured originals must not reach javac for a legacy target.
-    relPaths.each { sourceSets.main.java.exclude(it) }
+    // The newest-API originals must not reach javac for a legacy target.
+    (relPaths + overridePaths).each { sourceSets.main.java.exclude(it) }
 
     tasks.named("compileJava", JavaCompile) {
         dependsOn(generate)
         source(fileTree(outRoot))
+        source(files(overridePaths.collect { new File(overrideRoot, it) }))
     }
 }

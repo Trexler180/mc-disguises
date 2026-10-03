@@ -6,18 +6,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.ProfileLookupCallback;
-import com.mojang.authlib.GameProfileRepository;
-import com.mojang.authlib.minecraft.MinecraftSessionService;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
-import com.mojang.authlib.yggdrasil.ProfileResult;
-import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.Services;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.lang.reflect.Method;
 import java.net.URI;
-import java.net.Proxy;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -32,23 +28,15 @@ import java.util.function.Consumer;
 /**
  * Fetches GameProfiles with skin texture data for player disguises.
  *
- * Uses authlib's YggdrasilAuthenticationService (Apache HttpClient internally)
- * to avoid Fabric/Knot's URLStreamHandlerFactory blocking raw Java HTTP calls.
+ * Mojang lookups go through the server's own authlib {@link Services} (Apache
+ * HttpClient internally), which avoids Fabric/Knot's URLStreamHandlerFactory
+ * blocking raw Java HTTP calls and respects the server's auth environment.
  */
 public class SkinFetcher {
 
     private static final int CACHE_MAX = 200;
     private static final int BEDROCK_CACHE_MAX = CACHE_MAX * 2;
     private static final String GEYSER_API_BASE = "https://api.geysermc.org/v2";
-
-    private static final YggdrasilAuthenticationService AUTH_SERVICE =
-            new YggdrasilAuthenticationService(Proxy.NO_PROXY);
-
-    private static final GameProfileRepository PROFILE_REPO =
-            AUTH_SERVICE.createProfileRepository();
-
-    private static final MinecraftSessionService SESSION_SERVICE =
-            AUTH_SERVICE.createMinecraftSessionService();
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -105,7 +93,8 @@ public class SkinFetcher {
         }
         OnlineIdentity snapshot = onlineIdentity;
 
-        fetchDeduplicated(key, () -> resolveByName(name, snapshot), "'" + name + "'", server, cb);
+        Services services = server.services();
+        fetchDeduplicated(key, () -> resolveByName(name, snapshot, services), "'" + name + "'", server, cb);
     }
 
     public static void fetchByUUID(UUID uuid, MinecraftServer server, Consumer<GameProfile> cb) {
@@ -134,7 +123,8 @@ public class SkinFetcher {
         }
         OnlineIdentity snapshot = onlineIdentity;
 
-        fetchDeduplicated(key, () -> resolveByUUID(uuid, snapshot), "UUID " + uuid, server, cb);
+        Services services = server.services();
+        fetchDeduplicated(key, () -> resolveByUUID(uuid, snapshot, services), "UUID " + uuid, server, cb);
     }
 
     /**
@@ -186,7 +176,7 @@ public class SkinFetcher {
 
     // -----------------------------------------------------------------------
 
-    private static GameProfile resolveByName(String name, OnlineIdentity online) {
+    private static GameProfile resolveByName(String name, OnlineIdentity online, Services services) {
         // 1. Already online — free and instant
         if (online != null) {
             GameProfile bedrockProfile = resolveOnlineBedrock(online.uuid(), online.name());
@@ -203,7 +193,7 @@ public class SkinFetcher {
         try {
             UUID[] found = new UUID[1];
 
-            PROFILE_REPO.findProfilesByNames(new String[]{name}, new ProfileLookupCallback() {
+            services.profileRepository().findProfilesByNames(new String[]{name}, new ProfileLookupCallback() {
                 @Override
                 public void onProfileLookupSucceeded(String profileName, UUID uuid) {
                     found[0] = uuid;
@@ -220,7 +210,7 @@ public class SkinFetcher {
                 DisguisesMod.LOGGER.warn("Disguises: no Mojang account found for '{}'.", name);
             } else {
                 // 3. UUID → full profile with skin textures
-                GameProfile filled = fillProfile(found[0]);
+                GameProfile filled = fillProfile(services, found[0]);
                 if (filled != null) {
                     DisguisesMod.LOGGER.info("Disguises: skin for '{}' fetched via authlib (UUID {}).",
                             name, found[0]);
@@ -241,7 +231,7 @@ public class SkinFetcher {
         return resolveBedrockByNameOrXuid(name);
     }
 
-    private static GameProfile resolveByUUID(UUID uuid, OnlineIdentity online) {
+    private static GameProfile resolveByUUID(UUID uuid, OnlineIdentity online, Services services) {
         // 1. Already online
         if (online != null) {
             GameProfile bedrockProfile = resolveOnlineBedrock(online.uuid(), online.name());
@@ -250,7 +240,7 @@ public class SkinFetcher {
 
         // 2. UUID → full profile with skin textures
         try {
-            GameProfile filled = fillProfile(uuid);
+            GameProfile filled = fillProfile(services, uuid);
             if (filled != null) return filled;
             DisguisesMod.LOGGER.warn("Disguises: could not fetch profile for UUID {}.", uuid);
             return null;
@@ -702,8 +692,10 @@ public class SkinFetcher {
      * Fetches a full GameProfile (with skin texture properties) for a UUID
      * via Mojang's session server using authlib's Apache HTTP stack.
      */
-    private static GameProfile fillProfile(UUID uuid) {
-        ProfileResult result = SESSION_SERVICE.fetchProfile(uuid, true);
+    private static GameProfile fillProfile(Services services, UUID uuid) {
+        // var: ProfileResult moved from authlib.yggdrasil to authlib.services in 26.3,
+        // and the session service interface was renamed; both expose the same calls.
+        var result = services.sessionService().fetchProfile(uuid, true);
         if (result == null) return null;
         return result.profile();
     }

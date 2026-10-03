@@ -1,0 +1,130 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version '1.16.1'
+	id 'maven-publish'
+}
+
+def repoRoot = file("../..")
+def rootProperties = new Properties()
+file("${repoRoot}/gradle.properties").withInputStream { rootProperties.load(it) }
+
+def minecraftVersion = "26.2"
+def loaderVersion = "0.19.5"
+def fabricVersion = "0.161.0+26.2"
+def clothConfigVersion = "26.2.155"
+def modmenuVersion = "20.0.3"
+def javaRelease = 25
+def archiveBaseName = rootProperties.getProperty("archives_base_name")
+def resourceVersion = rootProperties.getProperty("mod_version")
+
+version = resourceVersion
+group = rootProperties.getProperty("maven_group")
+
+base {
+	archivesName = archiveBaseName
+}
+
+repositories {
+	mavenCentral()
+	maven {
+		name = "shedaniel"
+		url = 'https://maven.shedaniel.me/'
+		content {
+			includeGroup "me.shedaniel.cloth"
+			includeGroup "me.shedaniel"
+		}
+	}
+	maven {
+		name = "Modrinth"
+		url = 'https://api.modrinth.com/maven'
+		content {
+			includeGroup "maven.modrinth"
+		}
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"disguises" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+sourceSets {
+	main {
+		java.srcDirs = ["${repoRoot}/src/main/java"]
+		resources.srcDirs = ["${repoRoot}/src/main/resources"]
+	}
+	client {
+		java.srcDirs = ["${repoRoot}/src/client/java"]
+	}
+}
+
+// Excludes the newest-API sources and compiles rewritten/legacy copies instead,
+// so this target shares src/main/java with the primary build.
+apply from: "${repoRoot}/gradle/legacy-sources.gradle"
+applyLegacySources("${repoRoot}", minecraftVersion)
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraftVersion}"
+	implementation "net.fabricmc:fabric-loader:${loaderVersion}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${fabricVersion}"
+
+	// Keep MixinExtras bundled explicitly for compatibility with expression injections.
+	include(implementation("io.github.llamalad7:mixinextras-fabric:0.5.0"))
+
+	// Cloth Config (optional - for ModMenu config screen)
+	compileOnly("me.shedaniel.cloth:cloth-config-fabric:${clothConfigVersion}") {
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+	runtimeOnly("me.shedaniel.cloth:cloth-config-fabric:${clothConfigVersion}") {
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+
+	// ModMenu (optional)
+	compileOnly "maven.modrinth:modmenu:${modmenuVersion}"
+	runtimeOnly "maven.modrinth:modmenu:${modmenuVersion}"
+}
+
+processResources {
+	inputs.property "version", resourceVersion
+	inputs.property "minecraft_dependency", "~${minecraftVersion}"
+	inputs.property "loader_dependency", ">=${loaderVersion}"
+	inputs.property "java_dependency", ">=${javaRelease}"
+	inputs.property "modmenu_entrypoint", "com.coffee.disguises.client.compat.ModMenuApiImpl"
+	filesMatching("fabric.mod.json") {
+		expand(
+				"version": resourceVersion,
+				"minecraft_dependency": "~${minecraftVersion}",
+				"loader_dependency": ">=${loaderVersion}",
+				"java_dependency": ">=${javaRelease}",
+				"modmenu_entrypoint": "com.coffee.disguises.client.compat.ModMenuApiImpl"
+		)
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = javaRelease
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+	archiveClassifier = "mc26.2"
+}
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+
+	sourceCompatibility = JavaVersion.toVersion(javaRelease)
+	targetCompatibility = JavaVersion.toVersion(javaRelease)
+}
+
+jar {
+	from("${repoRoot}/LICENSE") {
+		rename { "${it}_${archiveBaseName}" }
+	}
+}

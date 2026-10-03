@@ -596,6 +596,10 @@ public enum DisguiseType {
     OAK_CHEST_BOAT("oak_chest_boat", EntityTypes.OAK_CHEST_BOAT, FlagWatcher.class, true, null, null, null),
     PALE_OAK_BOAT("pale_oak_boat", EntityTypes.PALE_OAK_BOAT, FlagWatcher.class, true, null, null, null),
     PALE_OAK_CHEST_BOAT("pale_oak_chest_boat", EntityTypes.PALE_OAK_CHEST_BOAT, FlagWatcher.class, true, null, null, null),
+    //#if MC>=26.3
+    POPLAR_BOAT("poplar_boat", EntityTypes.POPLAR_BOAT, FlagWatcher.class, true, null, null, null),
+    POPLAR_CHEST_BOAT("poplar_chest_boat", EntityTypes.POPLAR_CHEST_BOAT, FlagWatcher.class, true, null, null, null),
+    //#endif
     SPRUCE_BOAT("spruce_boat", EntityTypes.SPRUCE_BOAT, FlagWatcher.class, true, null, null, null),
     SPRUCE_CHEST_BOAT("spruce_chest_boat", EntityTypes.SPRUCE_CHEST_BOAT, FlagWatcher.class, true, null, null, null),
 

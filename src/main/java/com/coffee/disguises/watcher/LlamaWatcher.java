@@ -1,5 +1,11 @@
 package com.coffee.disguises.watcher;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
+
 /**
  * Llama/TraderLlama-specific metadata: strength, carpet color, variant.
  *
@@ -10,8 +16,10 @@ package com.coffee.disguises.watcher;
  *   index 17 - AbstractHorse flags (tame/eating/rearing byte)
  *   index 18 - AbstractChestedHorse: has chest (bool)
  *   index 19 - strength (int, 1-5)
- *   index 20 - carpet color (int, DyeColor ordinal; -1 = no carpet)
- *   index 21 - variant (int: 0=creamy, 1=white, 2=brown, 3=gray)
+ *   index 20 - variant (int: 0=creamy, 1=white, 2=brown, 3=gray)
+ *
+ * Since 1.21.5 the carpet is not metadata but an item in the BODY equipment slot,
+ * so {@link #setCarpetColor} maintains that slot in the custom equipment.
  */
 public class LlamaWatcher extends AgeableWatcher {
 
@@ -27,9 +35,23 @@ public class LlamaWatcher extends AgeableWatcher {
 
     public LlamaWatcher setHasChest(boolean hasChest)      { this.hasChest    = hasChest;                        return this; }
     public LlamaWatcher setStrength(int strength)          { this.strength    = Math.max(1, Math.min(5, strength)); return this; }
-    public LlamaWatcher setCarpetColor(int dyeColorId)     { this.carpetColor = dyeColorId;                      return this; }
-    public LlamaWatcher clearCarpet()                      { this.carpetColor = -1;                              return this; }
+    public LlamaWatcher clearCarpet()                      { return setCarpetColor(-1); }
     public LlamaWatcher setVariant(int variant)            { this.variant     = Math.max(0, Math.min(3, variant)); return this; }
+
+    /** {@code dyeColorId} is a {@link DyeColor#getId()}; -1 (or any unknown id) removes the carpet. */
+    public LlamaWatcher setCarpetColor(int dyeColorId) {
+        ItemStack carpet = ItemStack.EMPTY;
+        for (DyeColor color : DyeColor.values()) {
+            if (color.getId() != dyeColorId) continue;
+            Identifier id = Identifier.tryParse("minecraft:" + color.getName() + "_carpet");
+            if (id != null) {
+                carpet = BuiltInRegistries.ITEM.getOptional(id).map(ItemStack::new).orElse(ItemStack.EMPTY);
+            }
+        }
+        this.carpetColor = carpet.isEmpty() ? -1 : dyeColorId;
+        setCustomEquipment(EquipmentSlot.BODY, carpet);
+        return this;
+    }
 
     public boolean hasChest()    { return hasChest; }
     public int getStrength()     { return strength; }

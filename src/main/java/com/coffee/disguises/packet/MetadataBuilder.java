@@ -33,7 +33,7 @@ import net.minecraft.world.entity.animal.equine.Llama;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Creeper;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.cubemob.Slime;
@@ -137,12 +137,10 @@ public class MetadataBuilder {
     private static Field F_PLAYER_SKIN_PARTS;
 
     // AbstractMinecart custom display block
-    // DATA_ID_DISPLAY_BLOCK  (int)  — raw block-state ID  ← INT, not BlockState
-    // DATA_ID_DISPLAY_OFFSET (int)  — Y pixel offset (default 6)
-    // DATA_ID_CUSTOM_DISPLAY (bool) — whether to use the custom tile
+    // DATA_ID_CUSTOM_DISPLAY_BLOCK (Optional<BlockState>) — empty = the type's default tile
+    // DATA_ID_DISPLAY_OFFSET       (int)                  — Y pixel offset (default 6)
     private static Field F_MINECART_DISPLAY_BLOCK;
     private static Field F_MINECART_DISPLAY_OFFSET;
-    private static Field F_MINECART_CUSTOM_DISPLAY;
 
     // BlockDisplay block state
     // Vanilla BlockDisplay.DATA_BLOCK_STATE_ID uses EntityDataSerializers.BLOCK_STATE —
@@ -170,13 +168,11 @@ public class MetadataBuilder {
 
     // Strider
     private static Field F_STRIDER_SHAKING;
-    private static Field F_STRIDER_SADDLE;
 
     // Piglin
     private static Field F_PIGLIN_BABY;
     private static Field F_PIGLIN_CHARGING;
     private static Field F_PIGLIN_DANCING;
-    private static Field F_PIGLIN_CELEBRATING;
 
     // ArmorStand
     private static Field F_ARMOR_STAND_FLAGS;
@@ -209,7 +205,6 @@ public class MetadataBuilder {
     // Llama / AbstractChestedHorse
     private static Field F_ABSTRACT_CHESTED_HORSE_CHEST;
     private static Field F_LLAMA_STRENGTH;
-    private static Field F_LLAMA_CARPET_COLOR;
     private static Field F_LLAMA_VARIANT;
 
     // Cat
@@ -283,10 +278,6 @@ public class MetadataBuilder {
 
     private static final int IDX_PLAYER_SKIN_PARTS           = 16; // DATA_PLAYER_MODE_CUSTOMISATION (Avatar index in 1.21.11)
 
-    // AbstractMinecart (indices relative to full entity hierarchy — approximately 11–13 in 1.21.x)
-    private static final int IDX_MINECART_DISPLAY_BLOCK   = 11;
-    private static final int IDX_MINECART_DISPLAY_OFFSET  = 12;
-    private static final int IDX_MINECART_CUSTOM_DISPLAY  = 13;
 
     // BlockDisplay block state (first Display subtype-specific field, ~index 23 in 1.21.x)
     private static final int IDX_BLOCK_DISPLAY_BLOCK_STATE = 23;
@@ -304,12 +295,10 @@ public class MetadataBuilder {
     private static final int IDX_BEE_FLAGS               = 18;
 
     private static final int IDX_STRIDER_SHAKING         = 18;
-    private static final int IDX_STRIDER_SADDLE          = 19;
 
     private static final int IDX_PIGLIN_BABY             = 16;
     private static final int IDX_PIGLIN_CHARGING         = 17;
     private static final int IDX_PIGLIN_DANCING          = 18;
-    private static final int IDX_PIGLIN_CELEBRATING      = 19;
 
     private static final int IDX_ARMOR_STAND_FLAGS       = 15;
 
@@ -333,7 +322,6 @@ public class MetadataBuilder {
 
     private static final int IDX_ABSTRACT_CHESTED_CHEST  = 18;
     private static final int IDX_LLAMA_STRENGTH          = 19;
-    private static final int IDX_LLAMA_CARPET_COLOR      = 20;
     private static final int IDX_LLAMA_VARIANT           = 21;
 
     private static final int IDX_CAT_VARIANT             = 19;
@@ -380,7 +368,6 @@ public class MetadataBuilder {
     // ─────────────────────────────────────────────────────────────────────────
 
     private static volatile boolean initialized = false;
-    private static volatile boolean minecartInitialized = false;
 
     public static synchronized void init() {
         if (initialized) return;
@@ -418,36 +405,34 @@ public class MetadataBuilder {
         // integer "ticks remaining" field.  List the 1.21.11 name first; older names follow.
         F_WOLF_ANGER_TIME   = resolve(Wolf.class,          IDX_WOLF_ANGER_TIME,   "DATA_ANGER_END_TIME", "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
 
-        F_ENDERMAN_CREEPY = resolve(EnderMan.class, IDX_ENDERMAN_CREEPY, "DATA_CREEPY", "DATA_CREEPY_STARE", "DATA_IS_SCREAMING");
+        F_ENDERMAN_CREEPY = resolve(Enderman.class, IDX_ENDERMAN_CREEPY, "DATA_CREEPY", "DATA_CREEPY_STARE", "DATA_IS_SCREAMING");
 
         F_PHANTOM_SIZE = resolve(Phantom.class, IDX_PHANTOM_SIZE,
-                "DATA_SIZE", "DATA_ID_SIZE", "DATA_PHANTOM_SIZE");
+                "ID_SIZE", "DATA_SIZE", "DATA_ID_SIZE", "DATA_PHANTOM_SIZE");
 
         F_GOAT_SCREAMING  = resolve(Goat.class, IDX_GOAT_SCREAMING,
-                "DATA_IS_SCREAMING", "DATA_GOAT_SCREAMING");
+                "DATA_IS_SCREAMING_GOAT", "DATA_IS_SCREAMING", "DATA_GOAT_SCREAMING");
         F_GOAT_LEFT_HORN  = resolve(Goat.class, IDX_GOAT_LEFT_HORN,
                 "DATA_HAS_LEFT_HORN", "DATA_LEFT_HORN");
         F_GOAT_RIGHT_HORN = resolve(Goat.class, IDX_GOAT_RIGHT_HORN,
                 "DATA_HAS_RIGHT_HORN", "DATA_RIGHT_HORN");
 
         F_BEE_ANGER_TIME = resolve(Bee.class, IDX_BEE_ANGER_TIME,
-                "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME", "DATA_ANGRY");
+                "DATA_ANGER_END_TIME", "DATA_REMAINING_ANGER_TIME", "DATA_ANGER_TIME");
         F_BEE_FLAGS      = resolve(Bee.class, IDX_BEE_FLAGS,
                 "DATA_FLAGS_ID", "DATA_FLAGS", "DATA_BEE_FLAGS");
 
         F_STRIDER_SHAKING = resolve(Strider.class, IDX_STRIDER_SHAKING,
                 "DATA_SHAKING", "DATA_SHAKING_ID", "DATA_SUFFOCATING");
-        F_STRIDER_SADDLE  = resolve(Strider.class, IDX_STRIDER_SADDLE,
-                "DATA_HAS_SADDLE", "DATA_SADDLED", "DATA_SADDLE");
+        // No saddle field since 1.21.5: saddles are equipment (StriderWatcher.setSaddled).
 
         F_PIGLIN_BABY        = resolve(Piglin.class, IDX_PIGLIN_BABY,
-                "DATA_BABY_PIGLIN", "DATA_BABY");
+                "DATA_BABY_ID", "DATA_BABY_PIGLIN", "DATA_BABY");
         F_PIGLIN_CHARGING    = resolve(Piglin.class, IDX_PIGLIN_CHARGING,
                 "DATA_IS_CHARGING_CROSSBOW", "DATA_CHARGING_CROSSBOW");
         F_PIGLIN_DANCING     = resolve(Piglin.class, IDX_PIGLIN_DANCING,
                 "DATA_IS_DANCING", "DATA_DANCING");
-        F_PIGLIN_CELEBRATING = resolve(Piglin.class, IDX_PIGLIN_CELEBRATING,
-                "DATA_IS_CELEBRATING", "DATA_CELEBRATING");
+        // Vanilla has no separate "celebrating" field; the celebration is the dance.
 
         F_ARMOR_STAND_FLAGS = resolve(ArmorStand.class, IDX_ARMOR_STAND_FLAGS,
                 "DATA_CLIENT_FLAGS", "DATA_FLAGS", "DATA_ARMOR_STAND_FLAGS");
@@ -467,9 +452,9 @@ public class MetadataBuilder {
                 "DATA_FLAGS_ID", "DATA_FOX_FLAGS", "DATA_FLAGS");
 
         F_PANDA_MAIN_GENE   = resolve(Panda.class, IDX_PANDA_MAIN_GENE,
-                "DATA_MAIN_GENE_ID", "DATA_MAIN_GENE");
+                "MAIN_GENE_ID", "DATA_MAIN_GENE_ID", "DATA_MAIN_GENE");
         F_PANDA_HIDDEN_GENE = resolve(Panda.class, IDX_PANDA_HIDDEN_GENE,
-                "DATA_HIDDEN_GENE_ID", "DATA_HIDDEN_GENE");
+                "HIDDEN_GENE_ID", "DATA_HIDDEN_GENE_ID", "DATA_HIDDEN_GENE");
 
         F_AXOLOTL_VARIANT      = resolve(Axolotl.class, IDX_AXOLOTL_VARIANT,
                 "DATA_VARIANT", "DATA_VARIANT_ID", "DATA_AXOLOTL_VARIANT");
@@ -487,8 +472,7 @@ public class MetadataBuilder {
                 "DATA_ID_CHEST", "DATA_CHEST_ID", "DATA_HAS_CHEST");
         F_LLAMA_STRENGTH    = resolve(Llama.class, IDX_LLAMA_STRENGTH,
                 "DATA_STRENGTH_ID", "DATA_STRENGTH", "DATA_LLAMA_STRENGTH");
-        F_LLAMA_CARPET_COLOR = resolve(Llama.class, IDX_LLAMA_CARPET_COLOR,
-                "DATA_CARPET_COLOR", "DATA_CARPET_COLOR_ID", "DATA_DECOR_COLOR_ID");
+        // No carpet field since 1.21.5: carpets are body equipment (LlamaWatcher.setCarpetColor).
         F_LLAMA_VARIANT     = resolve(Llama.class, IDX_LLAMA_VARIANT,
                 "DATA_VARIANT_ID", "DATA_VARIANT", "DATA_LLAMA_VARIANT");
 
@@ -564,25 +548,12 @@ public class MetadataBuilder {
                     "DATA_PLAYER_MODE_CUSTOMISATION", "DATA_SKIN_PARTS", "DATA_PLAYER_SKIN_CUSTOMISATION");
         }
 
-        // AbstractMinecart — custom display block fields.
-        // In MC 1.21.2+ the minecart was reworked; the display-block DataTracker fields
-        // moved and the class hierarchy changed.  Try all known names across versions.
-        Class<?> minecartClass = loadClass(
-                "net.minecraft.world.entity.vehicle.AbstractMinecart",       // 1.21.1 and below / Mojang
-                "net.minecraft.world.entity.vehicle.AbstractMinecartLike",   // 1.21.2+ Mojang (post-rework base)
-                "net.minecraft.world.entity.vehicle.MinecartLike",           // alternate name
-                "net.minecraft.world.entity.vehicle.Minecart"                // plain Minecart (some mappings)
-        );
-        if (minecartClass != null) {
-            F_MINECART_DISPLAY_BLOCK  = resolve(minecartClass, IDX_MINECART_DISPLAY_BLOCK,
-                    "DATA_ID_DISPLAY_BLOCK", "DISPLAY_BLOCK_STATE_ID", "DATA_DISPLAY_BLOCK_STATE_ID");
-            F_MINECART_DISPLAY_OFFSET = resolve(minecartClass, IDX_MINECART_DISPLAY_OFFSET,
-                    "DATA_ID_DISPLAY_OFFSET", "DISPLAY_OFFSET_ID", "DATA_DISPLAY_OFFSET_ID");
-            F_MINECART_CUSTOM_DISPLAY = resolve(minecartClass, IDX_MINECART_CUSTOM_DISPLAY,
-                    "DATA_ID_CUSTOM_DISPLAY", "CUSTOM_DISPLAY_ID", "DATA_CUSTOM_DISPLAY_ID");
-        } else {
-            com.coffee.disguises.DisguisesMod.LOGGER.warn("[MetadataBuilder] AbstractMinecart class not found — minecart block display will not work.");
-        }
+        // AbstractMinecart — custom display block fields.  Name-only: indices 11–13
+        // collide with LivingEntity fields, so an index scan would return the wrong
+        // accessor.  Class literal so Loom remaps it in the production jar.
+        Class<?> minecartClass = net.minecraft.world.entity.vehicle.minecart.AbstractMinecart.class;
+        F_MINECART_DISPLAY_BLOCK  = resolveByNameOnly(minecartClass, "DATA_ID_CUSTOM_DISPLAY_BLOCK");
+        F_MINECART_DISPLAY_OFFSET = resolveByNameOnly(minecartClass, "DATA_ID_DISPLAY_OFFSET");
 
         // BlockDisplay — use a class literal so Loom remaps it correctly in production.
         // (String-based loadClass is NOT remapped by Loom and fails on a Fabric server.)
@@ -637,7 +608,6 @@ public class MetadataBuilder {
         logResolution("Player skinParts",      F_PLAYER_SKIN_PARTS);
         logResolution("Minecart displayBlock",  F_MINECART_DISPLAY_BLOCK);
         logResolution("Minecart displayOffset", F_MINECART_DISPLAY_OFFSET);
-        logResolution("Minecart customDisplay", F_MINECART_CUSTOM_DISPLAY);
         logResolution("BlockDisplay blockState",F_BLOCK_DISPLAY_BLOCK_STATE);
         logResolution("Display scale",          F_DISPLAY_SCALE);
         logResolution("Phantom size",           F_PHANTOM_SIZE);
@@ -647,11 +617,9 @@ public class MetadataBuilder {
         logResolution("Bee angerTime",          F_BEE_ANGER_TIME);
         logResolution("Bee flags",              F_BEE_FLAGS);
         logResolution("Strider shaking",        F_STRIDER_SHAKING);
-        logResolution("Strider saddle",         F_STRIDER_SADDLE);
         logResolution("Piglin baby",            F_PIGLIN_BABY);
         logResolution("Piglin chargingCrossbow",F_PIGLIN_CHARGING);
         logResolution("Piglin dancing",         F_PIGLIN_DANCING);
-        logResolution("Piglin celebrating",     F_PIGLIN_CELEBRATING);
         logResolution("ArmorStand flags",       F_ARMOR_STAND_FLAGS);
         logResolution("Parrot variant",         F_PARROT_VARIANT);
         logResolution("TropicalFish variant",   F_TROPICAL_FISH_VARIANT);
@@ -666,7 +634,6 @@ public class MetadataBuilder {
         logResolution("Horse variant",          F_HORSE_VARIANT);
         logResolution("Llama chest",            F_ABSTRACT_CHESTED_HORSE_CHEST);
         logResolution("Llama strength",         F_LLAMA_STRENGTH);
-        logResolution("Llama carpetColor",      F_LLAMA_CARPET_COLOR);
         logResolution("Llama variant",          F_LLAMA_VARIANT);
         logResolution("Cat variant",            F_CAT_VARIANT);
         logResolution("Cat lying",              F_CAT_LYING);
@@ -688,100 +655,7 @@ public class MetadataBuilder {
         logResolution("ArmorStand leftLegPose", F_ARMOR_STAND_LEFT_LEG_POSE);
         logResolution("ArmorStand rightLegPose",F_ARMOR_STAND_RIGHT_LEG_POSE);
 
-        // Resolve minecart fields now, using EntityTypes.MINECART to get the right class.
-        initMinecartFields();
-
         initialized = true;
-    }
-
-    /**
-     * Resolves minecart display-block DataTracker fields.
-     * Gets the entity class directly from EntityTypes.MINECART (no live entity needed),
-     * then uses NAME-ONLY resolution — never index scan.
-     *
-     * Index scan is intentionally disabled here because indices 11–13 exist on
-     * LivingEntity (effect-ambience, arrow-count, stinger-count) and would be
-     * matched on any entity class, producing completely wrong accessor types.
-     */
-    private static synchronized void initMinecartFields() {
-        if (minecartInitialized) return;
-
-        // Get the entity class from EntityTypes.MINECART via reflection.
-        // EntityType stores its entity factory; we create a temporary instance
-        // using a null level just to get the concrete class — we only need the class
-        // object itself, not a functioning entity.
-        Class<?> minecartEntityClass = null;
-        try {
-            // create(Level, EntitySpawnReason) — pass null level and COMMAND reason.
-            // We only need the class object; the entity is discarded immediately.
-            // Wrapped in try/catch in case null-level causes an NPE inside the factory.
-            net.minecraft.world.entity.Entity tmp =
-                    net.minecraft.world.entity.EntityTypes.MINECART.create(
-                            (net.minecraft.world.level.Level) null,
-                            net.minecraft.world.entity.EntitySpawnReason.COMMAND);
-            if (tmp != null) {
-                minecartEntityClass = tmp.getClass();
-                com.coffee.disguises.DisguisesMod.LOGGER.debug(
-                        "[MetadataBuilder] Got minecart class '{}' from EntityTypes.MINECART.create()",
-                        minecartEntityClass.getName());
-            }
-        } catch (Exception e) {
-            com.coffee.disguises.DisguisesMod.LOGGER.debug(
-                    "[MetadataBuilder] EntityTypes.MINECART.create(null, COMMAND) threw {}: {} — trying class name fallback",
-                    e.getClass().getSimpleName(), e.getMessage());
-        }
-
-        // If create() failed, fall back to known Mojang class names.
-        if (minecartEntityClass == null) {
-            minecartEntityClass = loadClass(
-                    "net.minecraft.world.entity.vehicle.Minecart",
-                    "net.minecraft.world.entity.vehicle.AbstractMinecart",
-                    "net.minecraft.world.entity.vehicle.AbstractMinecartLike"
-            );
-        }
-
-        if (minecartEntityClass == null) {
-            com.coffee.disguises.DisguisesMod.LOGGER.warn(
-                    "[MetadataBuilder] Could not determine minecart entity class — " +
-                            "custom display blocks in minecarts will not work.");
-            minecartInitialized = true;
-            return;
-        }
-
-        com.coffee.disguises.DisguisesMod.LOGGER.info(
-                "[MetadataBuilder] Resolving minecart display fields from class '{}'",
-                minecartEntityClass.getName());
-
-        // Name-only resolution — never fall back to index scan.
-        // The indices 11–13 collide with LivingEntity fields; scanning would return
-        // the wrong accessor (e.g. DATA_EFFECT_AMBIENCE_ID, DATA_ARROW_COUNT_ID).
-        Class<?> c = minecartEntityClass;
-        while (c != null && c != Object.class) {
-            if (F_MINECART_DISPLAY_BLOCK == null)
-                F_MINECART_DISPLAY_BLOCK = resolveByNameOnly(c,
-                        "DATA_ID_DISPLAY_BLOCK", "DISPLAY_BLOCK_STATE_ID", "DATA_DISPLAY_BLOCK_STATE_ID");
-            if (F_MINECART_DISPLAY_OFFSET == null)
-                F_MINECART_DISPLAY_OFFSET = resolveByNameOnly(c,
-                        "DATA_ID_DISPLAY_OFFSET", "DISPLAY_OFFSET_ID", "DATA_DISPLAY_OFFSET_ID");
-            if (F_MINECART_CUSTOM_DISPLAY == null)
-                F_MINECART_CUSTOM_DISPLAY = resolveByNameOnly(c,
-                        "DATA_ID_CUSTOM_DISPLAY", "CUSTOM_DISPLAY_ID", "DATA_CUSTOM_DISPLAY_ID");
-            if (F_MINECART_DISPLAY_BLOCK != null
-                    && F_MINECART_DISPLAY_OFFSET != null
-                    && F_MINECART_CUSTOM_DISPLAY != null) break;
-            c = c.getSuperclass();
-        }
-
-        logResolution("Minecart displayBlock",  F_MINECART_DISPLAY_BLOCK);
-        logResolution("Minecart displayOffset", F_MINECART_DISPLAY_OFFSET);
-        logResolution("Minecart customDisplay", F_MINECART_CUSTOM_DISPLAY);
-
-        if (F_MINECART_DISPLAY_BLOCK == null) {
-            com.coffee.disguises.DisguisesMod.LOGGER.warn(
-                    "[MetadataBuilder] Minecart display block fields not found — " +
-                            "the custom display tile feature may have been removed in this MC version.");
-        }
-        minecartInitialized = true;
     }
 
     // =========================================================================
@@ -895,7 +769,7 @@ public class MetadataBuilder {
         // ── Bee ───────────────────────────────────────────────────────────────
 
         if (watcher instanceof BeeWatcher bw) {
-            putInt(list,  F_BEE_ANGER_TIME, bw.getRemainingAngerTime());
+            putAngerTime(list, F_BEE_ANGER_TIME, bw.getRemainingAngerTime() > 0);
             putByte(list, F_BEE_FLAGS,      bw.getBeeFlags());
         }
 
@@ -903,7 +777,6 @@ public class MetadataBuilder {
 
         if (watcher instanceof StriderWatcher strw) {
             putBool(list, F_STRIDER_SHAKING, strw.isShaking());
-            putBool(list, F_STRIDER_SADDLE,  strw.isSaddled());
         }
 
         // ── Piglin ────────────────────────────────────────────────────────────
@@ -911,8 +784,7 @@ public class MetadataBuilder {
         if (watcher instanceof PiglinWatcher piw) {
             putBool(list, F_PIGLIN_BABY,        piw.isBabyPiglin());
             putBool(list, F_PIGLIN_CHARGING,    piw.isChargingCrossbow());
-            putBool(list, F_PIGLIN_DANCING,     piw.isDancing());
-            putBool(list, F_PIGLIN_CELEBRATING, piw.isCelebrating());
+            putBool(list, F_PIGLIN_DANCING,     piw.isDancing() || piw.isCelebrating());
         }
 
         // ── ArmorStand ────────────────────────────────────────────────────────
@@ -980,7 +852,6 @@ public class MetadataBuilder {
         if (watcher instanceof LlamaWatcher llamaw) {
             putBool(list, F_ABSTRACT_CHESTED_HORSE_CHEST, llamaw.hasChest());
             putInt(list,  F_LLAMA_STRENGTH,               llamaw.getStrength());
-            putInt(list,  F_LLAMA_CARPET_COLOR,           llamaw.getCarpetColor());
             putInt(list,  F_LLAMA_VARIANT,                llamaw.getVariant());
         }
 
@@ -1063,9 +934,8 @@ public class MetadataBuilder {
         // Only emitted when the watcher has explicitly requested a custom block.
 
         if (watcher instanceof MinecartWatcher mw && mw.isUseCustomDisplay()) {
-            putInt(list,  F_MINECART_DISPLAY_BLOCK,   mw.getBlockId());
-            putInt(list,  F_MINECART_DISPLAY_OFFSET,  mw.getDisplayOffset());
-            putBool(list, F_MINECART_CUSTOM_DISPLAY,  true);
+            put(list,    F_MINECART_DISPLAY_BLOCK,  java.util.Optional.of(mw.getBlockState()));
+            putInt(list, F_MINECART_DISPLAY_OFFSET, mw.getDisplayOffset());
         }
 
         // ── BlockDisplay block state ───────────────────────────────────────────
@@ -1129,6 +999,13 @@ public class MetadataBuilder {
      * @param expectIdx  expected getId() value of the accessor (index fallback)
      * @param names      candidate field names to try (in preference order)
      */
+    /**
+     * Fields that were only found by index scan.  The scan matches on index alone,
+     * so a hit may be an unrelated field of a different type; MetadataBuilderResolutionTest
+     * fails on any entry so a rename gets its new name added instead.
+     */
+    static final List<String> SCAN_RESOLVED = java.util.Collections.synchronizedList(new ArrayList<>());
+
     private static Field resolve(Class<?> clazz, int expectIdx, String... names) {
         if (clazz == null) return null;
 
@@ -1154,6 +1031,7 @@ public class MetadataBuilder {
         // looking for one whose accessor.id() == expectIdx
         Field found = scanByIndex(clazz, expectIdx);
         if (found != null) {
+            SCAN_RESOLVED.add(clazz.getSimpleName() + "." + found.getName());
             com.coffee.disguises.DisguisesMod.LOGGER.info(
                     "[MetadataBuilder] {} index={} resolved by scan (field '{}') — name candidates {} all failed",
                     clazz.getSimpleName(), expectIdx, found.getName(), Arrays.toString(names));
@@ -1239,14 +1117,6 @@ public class MetadataBuilder {
                     }
                 } catch (Exception ignored) {}
             }
-        }
-        return null;
-    }
-
-    private static Class<?> loadClass(String... candidates) {
-        for (String name : candidates) {
-            try { return Class.forName(name); }
-            catch (ClassNotFoundException ignored) {}
         }
         return null;
     }
@@ -1355,6 +1225,26 @@ public class MetadataBuilder {
     }
     private static void putLong(List<SynchedEntityData.DataValue<?>> list, Field f, long value) {
         put(list, f, value);
+    }
+
+    /**
+     * Anger is a game-tick end timestamp (Long) on current versions and a remaining-
+     * ticks counter (Integer) on older ones.  Writing the wrong boxed type is not
+     * caught until the packet is encoded, where it disconnects the observer.
+     */
+    private static void putAngerTime(List<SynchedEntityData.DataValue<?>> list, Field f, boolean angry) {
+        if (f == null) return;
+        try {
+            EntityDataAccessor<?> acc = (EntityDataAccessor<?>) f.get(null);
+            if (acc != null && acc.serializer() == EntityDataSerializers.LONG) {
+                putLong(list, f, angry ? Long.MAX_VALUE : -1L);
+            } else {
+                putInt(list, f, angry ? 400 : 0);
+            }
+        } catch (IllegalAccessException e) {
+            com.coffee.disguises.DisguisesMod.LOGGER.warn(
+                    "[MetadataBuilder] Failed to read anger accessor '{}': {}", f.getName(), e.getMessage());
+        }
     }
     private static void putOptComponent(List<SynchedEntityData.DataValue<?>> list,
                                         Field f, Optional<net.minecraft.network.chat.Component> value) {

@@ -33,10 +33,6 @@ repositories {
 			includeGroup "maven.modrinth"
 		}
 	}
-	maven {
-		name = "lucko"
-		url = 'https://oss.sonatype.org/content/repositories/snapshots'
-	}
 }
 
 loom {
@@ -112,6 +108,16 @@ java {
 	// that don't declare an intermediary source namespace in their javadoc jars.
 	sourceCompatibility = JavaVersion.toVersion(javaRelease)
 	targetCompatibility = JavaVersion.toVersion(javaRelease)
+}
+
+tasks.register("buildMc262", Exec) {
+	group = "build"
+	description = "Builds the alternate Minecraft 26.2 jar without changing the main target."
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		commandLine "cmd", "/c", "gradlew.bat", "-p", "versions/26.2", "build"
+	} else {
+		commandLine "./gradlew", "-p", "versions/26.2", "build"
+	}
 }
 
 tasks.register("buildMc2612", Exec) {

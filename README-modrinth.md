@@ -8,7 +8,7 @@ Over 100 entity types are supported, from passive animals and hostile mobs to ot
 
 For build instructions and source, see the [GitHub repository](https://github.com/Trexler180/mc-disguises#readme).
 
-**Requires** Fabric Loader and Fabric API. The main build targets Minecraft 26.2, with alternate 26.1.2 and 1.21.11 builds available.
+**Requires** Fabric Loader and Fabric API. The main build targets Minecraft 26.3, with alternate 26.2, 26.1.2 and 1.21.11 builds available.
 
 ---
 
@@ -69,7 +69,7 @@ Full tab-completion for all flags and their values is supported.
 - **Hostile / neutral mobs**: Zombie, Skeleton, Creeper, Enderman, Blaze, Warden, Breeze, Pillager, Piglin, Ravager, Shulker, Phantom, Slime, Magma Cube, and more
 - **Player**: Disguise as any player (with their skin)
 - **Block / display entities**: Falling Block, Block Display, Item
-- **Vehicles**: All 20 boat variants, all 7 minecart types
+- **Vehicles**: All boat variants (22 on 26.3, including poplar), all 7 minecart types
 - **Projectiles**: Arrow, Trident, Firework Rocket, Ender Pearl, Snowball, and more
 
 ---
@@ -142,8 +142,8 @@ Full tab-completion for all flags and their values is supported.
 
 - **Fabric Loader**
 - **Fabric API**
-- Main build: Minecraft 26.2
-- Alternate builds: Minecraft 26.1.2 and 1.21.11
+- Main build: Minecraft 26.3
+- Alternate builds: Minecraft 26.2, 26.1.2 and 1.21.11
 
 ---
 

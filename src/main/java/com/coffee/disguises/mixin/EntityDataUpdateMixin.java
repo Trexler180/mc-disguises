@@ -128,7 +128,7 @@ public abstract class EntityDataUpdateMixin {
             }
             IntList toKeep = new IntArrayList();
             boolean anyFiltered = false;
-            for (int entityId : removePacket.getEntityIds()) {
+            for (int entityId : com.coffee.disguises.compat.PacketCompat.removedEntityIds(removePacket)) {
                 Entity removed = serverLevel.getEntity(entityId);
                 // Suppress only if the entity is alive + disguised AND the
                 // observer should still see it.  isVanishedFrom is checked, but
@@ -165,10 +165,38 @@ public abstract class EntityDataUpdateMixin {
             return;
         }
 
+        // ── Arm swing ─────────────────────────────────────────────────────────
+        // A ClientboundAnimatePacket action before 26.3, its own packet since; see
+        // PacketCompat.swingEntityId.
+        int swingEntityId = com.coffee.disguises.compat.PacketCompat.swingEntityId(packet);
+        if (swingEntityId >= 0) {
+            Entity entity = serverLevel.getEntity(swingEntityId);
+            if (entity == null) return;
+            Disguise disguise = DisguiseManager.INSTANCE.getDisguise(entity);
+            if (disguise == null || observer == entity) return;
+
+            // Inanimate disguise: before 26.3 the client casts to LivingEntity → crash.
+            if (disguise.getType().isInanimate()) {
+                ci.cancel();
+                return;
+            }
+
+            // ── Iron Golem / Warden: translate swing into entity event 4 ──────────
+            // IronGolemModel / WardenModel use an AnimationState started by entity event 4.
+            // A disguised player's swing only sends a swing packet; translate it.
+            if (disguise.getType() == com.coffee.disguises.disguise.DisguiseType.IRON_GOLEM
+                    || disguise.getType() == com.coffee.disguises.disguise.DisguiseType.WARDEN) {
+                observer.connection.send(
+                        new net.minecraft.network.protocol.game.ClientboundEntityEventPacket(
+                                entity, (byte) 4));
+            }
+            return;
+        }
+
         // ── ClientboundAnimatePacket ──────────────────────────────────────────
-        // Client unconditionally casts to LivingEntity; drop for inanimate disguises.
-        // Additionally, action=2 (WAKE_UP_PLAYER) unconditionally casts to
-        // AbstractClientPlayer — drop it for all non-player disguises to prevent
+        // Before 26.3 the client unconditionally casts to LivingEntity; drop for
+        // inanimate disguises.  Additionally, action=2 (WAKE_UP_PLAYER) unconditionally
+        // casts to AbstractClientPlayer — drop it for all non-player disguises to prevent
         // ClassCastException when a sleeping/waking disguised player is observed.
         if (packet instanceof ClientboundAnimatePacket animPacket) {
             Entity entity = serverLevel.getEntity(animPacket.getId());
@@ -188,19 +216,7 @@ public abstract class EntityDataUpdateMixin {
             if (animAction == 2
                     && disguise.getType() != com.coffee.disguises.disguise.DisguiseType.PLAYER) {
                 ci.cancel();
-                return;
             }
-
-            // ── Iron Golem / Warden: translate swing into entity event 4 ──────────
-            // IronGolemModel / WardenModel use an AnimationState started by entity event 4.
-            // A disguised player's swing only sends an animate packet; translate it.
-            if (disguise.getType() == com.coffee.disguises.disguise.DisguiseType.IRON_GOLEM
-                    || disguise.getType() == com.coffee.disguises.disguise.DisguiseType.WARDEN) {
-                observer.connection.send(
-                        new net.minecraft.network.protocol.game.ClientboundEntityEventPacket(
-                                entity, (byte) 4));
-            }
-
             return;
         }
 
@@ -254,9 +270,8 @@ public abstract class EntityDataUpdateMixin {
             com.coffee.disguises.packet.PacketInterceptor.SENDING_DRAGON_ROTATION.set(true);
             try {
                 if (movePacket instanceof ClientboundMoveEntityPacket.PosRot posRot) {
-                    observer.connection.send(new ClientboundMoveEntityPacket.PosRot(
-                            moveEntity.getId(), posRot.getXa(), posRot.getYa(), posRot.getZa(),
-                            offsetYRot, xRot, movePacket.isOnGround()));
+                    observer.connection.send(com.coffee.disguises.compat.PacketCompat.withRotation(
+                            posRot, moveEntity.getId(), offsetYRot, xRot, movePacket.isOnGround()));
                 } else {
                     observer.connection.send(new ClientboundMoveEntityPacket.Rot(
                             moveEntity.getId(), offsetYRot, xRot, movePacket.isOnGround()));

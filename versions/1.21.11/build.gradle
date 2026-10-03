@@ -44,10 +44,6 @@ repositories {
 			includeGroup "maven.modrinth"
 		}
 	}
-	maven {
-		name = "lucko"
-		url = 'https://oss.sonatype.org/content/repositories/snapshots'
-	}
 }
 
 loom {
@@ -121,10 +117,10 @@ tasks.named("compileJava", JavaCompile) {
 	source(fileTree("src/main/java"))
 }
 
-// Excludes the 26.2-only sources and compiles rewritten copies of them instead,
+// Excludes the newest-API sources and compiles rewritten/legacy copies instead,
 // so this target shares src/main/java with the primary build.
 apply from: "${repoRoot}/gradle/legacy-sources.gradle"
-applyLegacySources("${repoRoot}")
+applyLegacySources("${repoRoot}", minecraftVersion)
 
 tasks.withType(AbstractArchiveTask).configureEach {
 	archiveClassifier = "mc1.21.11"

@@ -5,7 +5,9 @@ import com.coffee.disguises.disguise.DisguiseType;
 import com.coffee.disguises.disguise.PlayerDisguise;
 import com.coffee.disguises.watcher.BlockStateWatcher;
 import com.coffee.disguises.watcher.ItemWatcher;
+import com.coffee.disguises.watcher.LlamaWatcher;
 import com.coffee.disguises.watcher.SlimeWatcher;
+import com.coffee.disguises.watcher.StriderWatcher;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
@@ -14,6 +16,7 @@ import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -131,5 +134,28 @@ class DisguisePersistenceTest {
         PlayerDisguise pd = assertInstanceOf(PlayerDisguise.class, restored);
         assertEquals("Notch", pd.getDisguiseName());
         assertTrue(pd.isSelfDisguise());
+    }
+
+    @Test
+    void saddleAndCarpetAreEquipmentAndSurvive() {
+        // Since 1.21.5 these are equipment slots, not entity metadata.
+        Disguise strider = Disguise.builder(DisguiseType.STRIDER).build();
+        ((StriderWatcher) strider.getWatcher()).setSaddled(true);
+        Disguise llama = Disguise.builder(DisguiseType.LLAMA).build();
+        ((LlamaWatcher) llama.getWatcher()).setCarpetColor(DyeColor.RED.getId());
+
+        Disguise striderBack = roundTrip(strider);
+        Disguise llamaBack = roundTrip(llama);
+
+        assertTrue(((StriderWatcher) striderBack.getWatcher()).isSaddled());
+        assertEquals(Items.SADDLE,
+                striderBack.getWatcher().getCustomEquipment().get(EquipmentSlot.SADDLE).getItem());
+        assertEquals(DyeColor.RED.getId(), ((LlamaWatcher) llamaBack.getWatcher()).getCarpetColor());
+        assertEquals("minecraft:red_carpet", BuiltInRegistries.ITEM.getKey(
+                llamaBack.getWatcher().getCustomEquipment().get(EquipmentSlot.BODY).getItem()).toString());
+
+        ((LlamaWatcher) llama.getWatcher()).clearCarpet();
+        assertEquals(-1, ((LlamaWatcher) llama.getWatcher()).getCarpetColor());
+        assertTrue(!llama.getWatcher().getCustomEquipment().containsKey(EquipmentSlot.BODY));
     }
 }

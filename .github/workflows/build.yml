@@ -3,11 +3,12 @@
 # certain platforms or Java versions, and provides a first line of defence
 # against bad commits.
 #
-# All three Minecraft targets are built. The legacy targets compile the same
-# src/main/java as the primary build, with 26.2-only symbols rewritten by
-# gradle/legacy-sources.gradle — so a change that breaks that rewrite (a new
-# 26.2-only API call, an unguarded enum entry) fails here rather than shipping
-# a broken legacy jar. Building only the primary target would not catch it.
+# All four Minecraft targets are built. The legacy targets compile the same
+# src/main/java as the primary build, with newer-only symbols rewritten (and a
+# few shape-changed classes swapped) by gradle/legacy-sources.gradle — so a
+# change that breaks that (a new 26.3-only API call, an unguarded enum entry)
+# fails here rather than shipping a broken legacy jar. Building only the
+# primary target would not catch it.
 
 name: build
 on: [pull_request, push]
@@ -36,10 +37,19 @@ jobs:
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: build (minecraft 26.2)
+      - name: build (minecraft 26.3)
         run: |
           for attempt in 1 2 3; do
             ./gradlew build && exit 0
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "::warning::Gradle build failed on attempt $attempt; retrying in 15 seconds"
+            sleep 15
+          done
+
+      - name: build (minecraft 26.2)
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew -p versions/26.2 build && exit 0
             if [ "$attempt" -eq 3 ]; then exit 1; fi
             echo "::warning::Gradle build failed on attempt $attempt; retrying in 15 seconds"
             sleep 15
@@ -69,6 +79,7 @@ jobs:
           name: Artifacts
           path: |
             build/libs/
+            versions/26.2/build/libs/
             versions/1.21.11/build/libs/
             versions/26.1.2/build/libs/
       - name: capture test reports

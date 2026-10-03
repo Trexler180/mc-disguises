@@ -1,6 +1,7 @@
 package com.coffee.disguises.packet;
 
 import com.coffee.disguises.DisguisesMod;
+import com.coffee.disguises.compat.PacketCompat;
 import com.coffee.disguises.compat.VanishCompat;
 import com.coffee.disguises.core.DisguiseManager;
 import com.coffee.disguises.disguise.Disguise;
@@ -16,7 +17,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -558,8 +558,7 @@ public class PacketInterceptor {
             }
 
             // Sync puppet position + head rotation to follow the player
-            player.connection.send(new ClientboundEntityPositionSyncPacket(
-                    puppet.puppetId(), PositionMoveRotation.of(player), player.onGround()));
+            player.connection.send(PacketCompat.positionSync(puppet.puppetId(), player));
 
             byte headYRot = (byte) ((int) (player.getYHeadRot() * 256.0F / 360.0F));
             ClientboundRotateHeadPacket rotPkt = buildRotateHeadPacket(puppet.puppetId(), headYRot);
@@ -887,32 +886,45 @@ public class PacketInterceptor {
 
     /**
      * Forwards an arm-swing animation to the self-view puppet for the given player.
-     * Called from LivingEntitySwingMixin when a player begins a new swing, so the
-     * puppet mirrors the arm animation in third-person view.
+     * Called from the pre-26.3 LivingEntitySwingMixin when a player begins a new
+     * swing, so the puppet mirrors the arm animation in third-person view.
      *
      * @param player the swinging player
      * @param action one of {@code ClientboundAnimatePacket.SWING_MAIN_HAND} (0) or
      *               {@code ClientboundAnimatePacket.SWING_OFF_HAND} (3)
      */
     public static void forwardAnimationToPuppet(ServerPlayer player, int action) {
-        SelfViewPuppet puppet = selfViewPuppets.get(player.getUUID());
-        if (puppet == null) return;
-        // ClientboundAnimatePacket handler unconditionally casts to LivingEntity on the client.
-        // Sending it to an inanimate puppet (TNT, Boat, etc.) causes a ClassCastException crash.
-        Disguise animDisguise = DisguiseManager.INSTANCE.getDisguise(player);
-        if (animDisguise != null && animDisguise.getType().isInanimate()) return;
-        try {
+        forwardToPuppet(player, puppetId -> {
             // ClientboundAnimatePacket's public constructor requires an Entity, so we
             // build the packet by writing raw bytes and decoding via STREAM_CODEC.
             net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(
                     io.netty.buffer.Unpooled.buffer(10));
-            buf.writeVarInt(puppet.puppetId());
-            buf.writeVarInt(action);
-            ClientboundAnimatePacket pkt = ClientboundAnimatePacket.STREAM_CODEC.decode(buf);
-            buf.release();
-            player.connection.send(pkt);
+            try {
+                buf.writeVarInt(puppetId);
+                buf.writeVarInt(action);
+                return ClientboundAnimatePacket.STREAM_CODEC.decode(buf);
+            } finally {
+                buf.release();
+            }
+        });
+    }
+
+    /**
+     * Sends the packet built by {@code packetForPuppet} (given the puppet's entity id)
+     * to the player's own client, if they have a self-view puppet that can animate.
+     */
+    public static void forwardToPuppet(ServerPlayer player,
+                                       java.util.function.IntFunction<net.minecraft.network.protocol.Packet<?>> packetForPuppet) {
+        SelfViewPuppet puppet = selfViewPuppets.get(player.getUUID());
+        if (puppet == null) return;
+        // Before 26.3 the client's ClientboundAnimatePacket handler unconditionally casts
+        // to LivingEntity; sending it to an inanimate puppet (TNT, Boat, etc.) crashes.
+        Disguise animDisguise = DisguiseManager.INSTANCE.getDisguise(player);
+        if (animDisguise != null && animDisguise.getType().isInanimate()) return;
+        try {
+            player.connection.send(packetForPuppet.apply(puppet.puppetId()));
         } catch (Exception e) {
-            DisguisesMod.LOGGER.debug("[Disguises] forwardAnimationToPuppet failed: {}", e.getMessage());
+            DisguisesMod.LOGGER.debug("[Disguises] forwardToPuppet failed: {}", e.getMessage());
         }
     }
 
@@ -1532,7 +1544,7 @@ public class PacketInterceptor {
                     sendDisguisedSpawn(observer, entity, disguise);
                     observer.connection.send(new ClientboundRotateHeadPacket(entity, headYRot));
                 } else if (dx != 0 || dy != 0 || dz != 0) {
-                    observer.connection.send(new ClientboundMoveEntityPacket.PosRot(
+                    observer.connection.send(PacketCompat.posRot(
                             entity.getId(), (short) dx, (short) dy, (short) dz,
                             yRot, xRot, entity.onGround()));
                     observer.connection.send(new ClientboundRotateHeadPacket(entity, headYRot));

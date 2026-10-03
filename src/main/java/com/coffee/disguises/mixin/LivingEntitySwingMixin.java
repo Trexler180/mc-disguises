@@ -2,41 +2,41 @@ package com.coffee.disguises.mixin;
 
 import com.coffee.disguises.core.DisguiseManager;
 import com.coffee.disguises.packet.PacketInterceptor;
-import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
+import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.component.SwingAnimation;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Forwards arm-swing animation to the self-view puppet when a disguised player swings.
  *
- * LivingEntity.swing(InteractionHand, boolean) is the single entry-point for both
- * main-hand and off-hand swings.  It sets {@code swinging = true} and dispatches
- * a ClientboundAnimatePacket to NEARBY observers via {@code broadcast} (which excludes
- * the entity itself).  Because the player never receives their own swing packet, the
- * self-view puppet would otherwise never play the swing animation.
+ * LivingEntity.swing(InteractionHand, SwingAnimation, boolean) is the single
+ * entry-point for both main-hand and off-hand swings.  It sends a
+ * ClientboundSwingAnimationPacket to tracking observers, which never includes the
+ * player's own client unless {@code updateSelf} is set — and even then it targets
+ * the player, not the puppet — so the self-view puppet would otherwise never swing.
  *
- * We inject at HEAD and check {@code this.swinging} to guard against re-entry during
- * an in-progress swing cycle (vanilla resets the cycle when called mid-swing, but we
- * only need to forward the animation once per new swing).
+ * swing returns whether a new swing actually started (false while one is still in
+ * progress), so forwarding on a true return sends exactly one packet per swing.
+ *
+ * This is the 26.3 version; older targets compile
+ * versions/_legacy-common/.../LivingEntitySwingMixin.java instead.
  */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntitySwingMixin {
 
-    @Shadow
-    protected boolean swinging;
-
     @Inject(
-            method = "swing(Lnet/minecraft/world/InteractionHand;Z)V",
-            at = @At("HEAD")
+            method = "swing(Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/item/component/SwingAnimation;Z)Z",
+            at = @At("RETURN")
     )
-    private void disguises$onSwing(InteractionHand hand, boolean updateSelf, CallbackInfo ci) {
-        // Only forward for server-side player entities
+    private void disguises$onSwing(InteractionHand hand, SwingAnimation animation, boolean updateSelf,
+                                   CallbackInfoReturnable<Boolean> cir) {
+        if (!cir.getReturnValueZ()) return;
         if (!((Object) this instanceof ServerPlayer player)) return;
         if (player.level().isClientSide()) return;
 
@@ -44,12 +44,7 @@ public abstract class LivingEntitySwingMixin {
         var disguise = DisguiseManager.INSTANCE.getDisguise(player);
         if (disguise == null || !disguise.isSelfDisguise()) return;
 
-        // Guard against mid-swing re-entry: swinging == false means a new swing is starting
-        if (swinging) return;
-
-        int action = hand == InteractionHand.MAIN_HAND
-                ? ClientboundAnimatePacket.SWING_MAIN_HAND
-                : ClientboundAnimatePacket.SWING_OFF_HAND;
-        PacketInterceptor.forwardAnimationToPuppet(player, action);
+        PacketInterceptor.forwardToPuppet(player,
+                puppetId -> new ClientboundSwingAnimationPacket(puppetId, hand, animation));
     }
 }
