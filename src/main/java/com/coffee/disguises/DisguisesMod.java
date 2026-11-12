@@ -12,6 +12,7 @@ import com.coffee.disguises.packet.SkinFetcher;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -119,6 +120,10 @@ public class DisguisesMod implements ModInitializer {
                 DisguiseManager.INSTANCE.restorePersistedDisguise(handler.player);
             }
         });
+
+        // Deferred skin fetch for persisted player disguises on mobs.
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) ->
+                DisguiseManager.INSTANCE.onEntityLoaded(entity));
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             if (CONFIG.persistDisguises) {

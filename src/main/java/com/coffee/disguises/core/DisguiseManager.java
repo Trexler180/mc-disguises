@@ -69,6 +69,12 @@ public class DisguiseManager {
      */
     private final java.util.Set<UUID> selfViewPrefs = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Persisted player disguises on entities that were not loaded at startup, whose
+     * skin is fetched when the entity loads ({@link #onEntityLoaded}).
+     */
+    private final java.util.Set<UUID> pendingSkinRestores = ConcurrentHashMap.newKeySet();
+
     private static final Path PERSIST_PATH =
             FabricLoader.getInstance().getConfigDir().resolve("disguises-persisted.json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -389,6 +395,7 @@ public class DisguiseManager {
         JsonObject root = readPersistedRoot();
         persistedRoot = root;
         persistDirty = false;
+        pendingSkinRestores.clear();
 
         for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
             try {
@@ -396,7 +403,15 @@ public class DisguiseManager {
                 JsonObject obj = entry.getValue().getAsJsonObject();
                 deserializeDisguise(obj).ifPresent(disguise -> {
                     activeDisguises.put(uuid, disguise);
-                    fetchPersistedSkin(server, uuid, disguise);
+                    // Fetch the skin only once the entity is actually in the world.
+                    // Fetching for every entry here would send one Mojang lookup per
+                    // persisted player disguise at startup, mostly for players who
+                    // are offline, and risk the API's rate limit.
+                    if (isLoadedInAnyLevel(server, uuid)) {
+                        fetchPersistedSkin(server, uuid, disguise);
+                    } else {
+                        pendingSkinRestores.add(uuid);
+                    }
                 });
             } catch (Exception ex) {
                 DisguisesMod.LOGGER.warn("Failed to load persisted disguise entry: {}",
@@ -421,6 +436,7 @@ public class DisguiseManager {
         // Loaded at SERVER_STARTED if the entry predates this session; take it out
         // of the active map so applyDisguise treats this as a fresh apply.
         Disguise disguise = activeDisguises.remove(uuid);
+        pendingSkinRestores.remove(uuid);
         if (disguise == null) {
             JsonElement saved = persistedRoot().get(uuid.toString());
             if (saved == null || !saved.isJsonObject()) return;
@@ -429,13 +445,36 @@ public class DisguiseManager {
                 removePersistedDisguise(uuid);
                 return;
             }
-            fetchPersistedSkin(serverFor(player), uuid, disguise);
         }
 
         if (!applyDisguise(player, disguise)) {
             // A listener vetoed it; don't keep offering it on every login.
             removePersistedDisguise(uuid);
+            return;
         }
+        // No-op if the skin is already known; the callback runs on a later tick,
+        // after applyDisguise has put the disguise back in the active map.
+        fetchPersistedSkin(serverFor(player), uuid, disguise);
+    }
+
+    /**
+     * Called when an entity is loaded into a level.  Fetches the skin for a
+     * persisted player disguise on a non-player entity, deferred from startup.
+     * Players go through {@link #restorePersistedDisguise} instead.
+     */
+    public void onEntityLoaded(Entity entity) {
+        if (entity instanceof ServerPlayer) return;
+        UUID uuid = entity.getUUID();
+        if (!pendingSkinRestores.remove(uuid)) return;
+        Disguise disguise = activeDisguises.get(uuid);
+        if (disguise != null) fetchPersistedSkin(serverFor(entity), uuid, disguise);
+    }
+
+    private static boolean isLoadedInAnyLevel(MinecraftServer server, UUID uuid) {
+        for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
+            if (level.getEntity(uuid) != null) return true;
+        }
+        return false;
     }
 
     /**
